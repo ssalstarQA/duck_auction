@@ -1,0 +1,42 @@
+name: duck_auction
+description: "Duck Auction App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  firebase_core: ^3.15.1
+  firebase_auth: ^5.6.2
+  cloud_firestore: ^5.6.11
+  firebase_storage: ^12.4.9
+  image_picker: ^1.1.2
+  file_picker: ^8.3.7
+  url_launcher: ^6.3.1
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/image/
+    - assets/image/image/
+    - assets/image/icon/
+
+  fonts:
+    - family: Cafe24OhsquareAir
+      fonts:
+        - asset: assets/fonts/Cafe24OhsquareAir-v2.0.otf

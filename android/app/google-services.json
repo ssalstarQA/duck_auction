@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "203119332761",
+    "project_id": "duckauction",
+    "storage_bucket": "duckauction.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:203119332761:android:3909b89d69a16400189708",
+        "android_client_info": {
+          "package_name": "com.duckauction.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "203119332761-92f13770jbl2q8k0iarthn8iq622fl6v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpxz6zpW63DEJCsLuHHwEPs0LOAah1CAM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "203119332761-92f13770jbl2q8k0iarthn8iq622fl6v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
