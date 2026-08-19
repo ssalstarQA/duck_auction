@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import 'email_verification_screen.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
 
@@ -82,8 +83,15 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
 
       if (!mounted) return;
 
+      await AuthService.reloadCurrentUser();
+      if (!mounted) return;
+
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(
+          builder: (_) => AuthService.isEmailVerified
+              ? const HomeScreen()
+              : EmailVerificationScreen(email: email),
+        ),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
@@ -178,7 +186,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
             child: const Text(
               '아이디/비밀번호 찾기',
               style: TextStyle(
-                color: Color(0xFF334155),
+                color: Color(0xFF16305C),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -225,7 +233,7 @@ class _AuthCheckItem extends StatelessWidget {
           children: [
             Checkbox(
               value: value,
-              activeColor: const Color(0xFF334155),
+              activeColor: const Color(0xFF16305C),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5),
               ),
@@ -259,11 +267,11 @@ class _AuthScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFFFFFFF),
       appBar: AppBar(
         backgroundColor: const Color(0xFFFFFFFF),
         elevation: 0,
-        foregroundColor: const Color(0xFF334155),
+        foregroundColor: const Color(0xFF16305C),
         title: Text(
           title,
           style: const TextStyle(fontWeight: FontWeight.w900),
@@ -301,7 +309,7 @@ class _AuthScaffold extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFF334155),
+                      color: Color(0xFF16305C),
                     ),
                   ),
                 ),
@@ -378,7 +386,7 @@ class _AuthTextField extends StatelessWidget {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
               borderSide: const BorderSide(
-                color: Color(0xFF334155),
+                color: Color(0xFF16305C),
                 width: 1.6,
               ),
             ),
@@ -407,7 +415,7 @@ class _PrimaryButton extends StatelessWidget {
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
           elevation: 0,
-          backgroundColor: const Color(0xFF334155),
+          backgroundColor: const Color(0xFF16305C),
           disabledBackgroundColor: const Color(0xFFCBD5E1),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
@@ -443,7 +451,7 @@ class _OutlineButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF334155),
+          foregroundColor: const Color(0xFF16305C),
           side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),

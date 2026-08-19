@@ -1,8 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 안드로이드 13(API 33) 이상에서 알림을 보내려면 이 권한이 필요합니다.
+         (앱이 FirebaseMessaging.requestPermission()을 호출하면 이 권한을 근거로
+         시스템이 사용자에게 알림 허용 여부를 물어봅니다.) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="duck_auction"
+        android:label="덕옥션"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- FCM 알림이 시스템 알림함에 표시될 때 쓸 기본 아이콘/색상이에요.
+             지정하지 않으면 일부 기기에서 흰색 사각형처럼 보일 수 있어서 넣어뒀어요. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@android:color/black" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,6 +42,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- image_cropper(ucrop) 사진 크롭 화면 액티비티예요. -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -1,8 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../legal/legal_texts.dart';
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import 'email_verification_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -103,7 +104,12 @@ class _SignupScreenState extends State<SignupScreen> {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('회원가입 완료'),
-            content: const Text('덕옥션 가입이 완료되었습니다.\n홈 화면으로 이동합니다.'),
+            content: const Text(
+              '덕옥션 가입이 완료되었습니다.\n이메일 인증을 진행해주세요.\n\n'
+              '둘러보는 건 지금도 자유롭게 가능하지만, 경매 등록이나 입찰처럼\n'
+              '실제 거래를 하시려면 이메일 인증과 휴대폰 인증이 추가로 필요해요.\n'
+              '해당 기능을 이용하실 때 안내해드릴게요.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -117,9 +123,11 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => EmailVerificationScreen(email: email)),
         (route) => false,
       );
+    } on RejoinBlockedException catch (e) {
+      _showMessage('탈퇴 후 재가입까지 ${e.remainingDays}일 남았어요. 잠시 후 다시 시도해주세요.');
     } on FirebaseAuthException catch (e) {
       _showMessage(_authErrorMessage(e.code));
     } catch (_) {
@@ -769,20 +777,7 @@ class _AgreementContent {
   static const terms = _AgreementContent(
     title: '서비스 이용약관',
     subtitle: '덕옥션 서비스 이용을 위한 기본 약관입니다.',
-    body: """제1조 목적
-본 약관은 덕옥션이 제공하는 굿즈 경매 및 거래 서비스의 이용 조건, 회원의 권리와 의무, 서비스 이용 절차를 정하는 것을 목적으로 합니다.
-
-제2조 회원의 의무
-회원은 타인의 정보를 도용하거나 허위 정보를 입력해서는 안 되며, 서비스 이용 중 관련 법령과 덕옥션 운영정책을 준수해야 합니다.
-
-제3조 경매 이용
-회원은 상품 등록, 입찰, 채팅, 거래 확정 등 서비스 기능을 이용할 수 있습니다. 경매 특성상 입찰 후 취소가 제한될 수 있으며, 낙찰 후 거래 이행 의무가 발생할 수 있습니다.
-
-제4조 서비스 제한
-허위 상품 등록, 위조품 판매, 사기성 거래, 부적절한 채팅, 시스템 악용이 확인될 경우 서비스 이용이 제한될 수 있습니다.
-
-제5조 약관 변경
-덕옥션은 필요한 경우 약관을 변경할 수 있으며, 변경 사항은 앱 내 공지사항 또는 별도 안내를 통해 고지합니다.""",
+    body: kTermsOfServiceText,
   );
 
   static const privacy = _AgreementContent(

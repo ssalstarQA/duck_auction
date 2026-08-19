@@ -1,4 +1,4 @@
-package com.duckauction.duck_auction
+package com.duckauction.app
 
 import io.flutter.embedding.android.FlutterActivity
 

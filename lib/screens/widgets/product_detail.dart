@@ -3,9 +3,22 @@ part of '../home_screen.dart';
 class ProductDetailScreen extends StatefulWidget {
   final ProductItem product;
 
+  /// 진입하자마자 하단 입찰 영역을 자동으로 열지 여부예요(입찰 목록의
+  /// '상위입찰하기'에서 사용). 이미 마감된 경매면 입찰창 대신 불가 사유
+  /// 팝업을 보여줘요.
+  final bool autoOpenBid;
+
+  /// 진입하자마자 보여줄 안내 팝업(판매 목록의 '수정불가' 등). 지정하면
+  /// 이 내용을 알림 팝업으로 한 번 띄워요.
+  final String? entryNoticeTitle;
+  final String? entryNoticeText;
+
   const ProductDetailScreen({
     super.key,
     required this.product,
+    this.autoOpenBid = false,
+    this.entryNoticeTitle,
+    this.entryNoticeText,
   });
 
   @override
@@ -26,6 +39,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void initState() {
     super.initState();
     _syncFromProduct(widget.product);
+    // 진입 인텐트 처리: 안내 팝업 또는 하단 입찰 영역 자동 열기.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.entryNoticeText != null) {
+        _showInfoPopup(widget.entryNoticeTitle ?? '안내', widget.entryNoticeText!);
+      } else if (widget.autoOpenBid) {
+        final product = widget.product;
+        if (!product.isAuctionActive) {
+          _showInfoPopup(
+            '상위입찰 불가',
+            '이미 ${product.statusLabel}된 경매라 상위입찰을 할 수 없어요.',
+          );
+        } else {
+          _showBidSheet(context, product);
+        }
+      }
+    });
+  }
+
+  Future<void> _showInfoPopup(String title, String text) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Color(0xFF334155), size: 20),
+            const SizedBox(width: 8),
+            Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF16305C))),
+          ],
+        ),
+        content: Text(text, style: const TextStyle(fontSize: 14, height: 1.55, color: Color(0xFF475569))),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF334155)),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -118,7 +173,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             lastBidUserId = product.lastBidUserId;
             isLiked = DuckAuctionStore.isFavorite(product);
           }
-          return _buildDetailScaffold(_mergedProduct(product));
+          // 실시간 스트림에 오류가 나면 화면 전체를 막는 대신, 마지막으로 알고 있던
+          // 가격으로 계속 보여주되 상단에 얇은 안내 배너로 알려줍니다(입찰 시
+          // 최신 금액이 아닐 수 있음을 사용자가 인지할 수 있게 하기 위함).
+          return _buildDetailScaffold(_mergedProduct(product), hasLiveError: snapshot.hasError);
         },
       );
     }
@@ -126,7 +184,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return _buildDetailScaffold(_mergedProduct(widget.product));
   }
 
-  Widget _buildDetailScaffold(ProductItem product) {
+  Widget _buildDetailScaffold(ProductItem product, {bool hasLiveError = false}) {
     final timeRemaining = _timeRemainingText(product);
 
     return Scaffold(
@@ -177,44 +235,71 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      bottomNavigationBar: _DetailBottomBar(
-        product: product,
-        currentPrice: currentPrice,
-        onOpenCart: () => _toggleCart(product),
-        onChat: () => _openChat(product),
-        onBid: () => _showBidSheet(context, product),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      body: Column(
         children: [
-          _DetailImageCarousel(
-            controller: _imageController,
-            product: product,
-            currentIndex: currentImageIndex,
-            likeCount: likeCount,
-            timeRemaining: timeRemaining,
-            onChanged: (index) => setState(() => currentImageIndex = index),
+          if (hasLiveError)
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFFFF7ED),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              child: Row(
+                children: [
+                  const Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFC2410C)),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      '실시간 가격 정보를 불러오지 못했어요. 입찰 전 새로고침 해주세요.',
+                      style: TextStyle(color: Color(0xFFC2410C), fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              children: [
+                _DetailImageCarousel(
+                  controller: _imageController,
+                  product: product,
+                  currentIndex: currentImageIndex,
+                  likeCount: likeCount,
+                  timeRemaining: timeRemaining,
+                  onChanged: (index) => setState(() => currentImageIndex = index),
+                ),
+                const SizedBox(height: 12),
+                _DetailPriceCard(
+                  product: product,
+                  currentPrice: currentPrice,
+                  bidCount: bidCount,
+                  timeRemaining: timeRemaining,
+                  endAtText: _formatDate(product.endAt),
+                ),
+                const SizedBox(height: 12),
+                _AiRecommendationCard(product: product, currentPrice: currentPrice),
+                const SizedBox(height: 12),
+                _SellerProfileCard(product: product),
+                const SizedBox(height: 12),
+                _AuctionPolicyCard(product: product, currentPrice: currentPrice, bidCount: bidCount, timeRemaining: timeRemaining),
+                const SizedBox(height: 12),
+                _BidHistoryCard(product: product),
+                const SizedBox(height: 12),
+                _AutoBidCard(product: product),
+                const SizedBox(height: 12),
+                _DescriptionCard(product: product),
+                const SizedBox(height: 12),
+                _SellerOtherProducts(currentProduct: product),
+                const SizedBox(height: 12),
+                _RecommendSection(currentProduct: product),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          _DetailPriceCard(
+          _DetailBottomBar(
             product: product,
             currentPrice: currentPrice,
-            bidCount: bidCount,
-            timeRemaining: timeRemaining,
-            endAtText: _formatDate(product.endAt),
+            onChat: () => _openChat(product),
+            onBid: () => _showBidSheet(context, product),
           ),
-          const SizedBox(height: 12),
-          _AiRecommendationCard(product: product, currentPrice: currentPrice),
-          const SizedBox(height: 12),
-          _SellerProfileCard(product: product),
-          const SizedBox(height: 12),
-          _AuctionPolicyCard(product: product, currentPrice: currentPrice, bidCount: bidCount, timeRemaining: timeRemaining),
-          const SizedBox(height: 12),
-          _DescriptionCard(product: product),
-          const SizedBox(height: 12),
-          _SellerOtherProducts(currentProduct: product),
-          const SizedBox(height: 12),
-          _RecommendSection(currentProduct: product),
         ],
       ),
     );
@@ -231,9 +316,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
 
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AuctionRegisterScreen(editProduct: product),
-      ),
+      MaterialPageRoute(builder: (_) => AuctionRegisterScreen(editProduct: product)),
     );
 
     if (!mounted) return;
@@ -302,38 +385,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     });
   }
 
-  void _toggleCart(ProductItem product) {
-    if (_isGuestUser()) {
-      _showLoginRequiredSheet(
-        context,
-        title: '장바구니는 로그인 후 가능해요',
-        description: '관심 있는 경매를 장바구니에 담으려면 로그인/회원가입이 필요해요.',
-      );
-      return;
-    }
-
-    final wasInCart = DuckAuctionStore.isInCart(product);
-    DuckAuctionStore.toggleCart(product);
-
-    if (!wasInCart) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('장바구니에 담았어요.'),
-          action: SnackBarAction(
-            label: '보러가기',
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()));
-            },
-          ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('장바구니에서 제거했어요.')),
-      );
-    }
-  }
-
   void _openChat(ProductItem product) {
     if (_isGuestUser()) {
       _showLoginRequiredSheet(
@@ -348,7 +399,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Future<void> _copyShareLink(ProductItem product) async {
     final idOrTitle = product.id?.isNotEmpty == true ? product.id! : Uri.encodeComponent(product.title);
-    final link = 'https://duckauction.app/products/$idOrTitle';
+    final link = 'https://duckauction.com/products/$idOrTitle';
     final text = '덕옥션에서 ${product.title} 경매를 확인해보세요.\n$link';
 
     await Clipboard.setData(ClipboardData(text: text));
@@ -569,10 +620,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return confirmed == true;
   }
 
-  void _showBidSheet(BuildContext context, ProductItem product) {
+  Future<void> _showBidSheet(BuildContext context, ProductItem product) async {
+    if (_isGuestUser()) {
+      _showLoginRequiredSheet(
+        context,
+        title: '입찰은 로그인 후 가능해요',
+        description: '경매에 입찰하려면 로그인/회원가입이 필요해요.',
+      );
+      return;
+    }
+    if (await _needsTradeVerification()) {
+      final ready = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const TradeReadinessScreen()),
+      );
+      if (ready != true || !context.mounted) return;
+    }
+    if (!context.mounted) return;
+
     final bidController = TextEditingController();
     final bidUnit = DuckAuctionStore.parseBidUnit(product.bidUnit);
-    final nextPrice = currentPrice + bidUnit;
+    final nextPrice = DuckAuctionStore.minValidBid(currentPrice: currentPrice, bidUnit: bidUnit);
     bool isSubmitting = false;
     String? bidErrorText;
 
@@ -625,6 +692,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           Text(
                             '${_formatPrice(bidUnit)} 단위로만 입찰할 수 있어요.',
                             style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            '다른 사람이 예약입찰(자동입찰)을 걸어뒀다면, 내가 입찰한 직후 곧바로 더 높은 금액으로 밀릴 수 있어요.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -713,7 +785,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 return;
                               }
 
-                              if (product.sellerId != null && product.sellerId == currentUser.uid) {
+                              // 내 경매엔 입찰 불가. sellerId가 없는(예전) 데이터는
+                              // 닉네임(고유값)으로도 한 번 더 걸러서, 자기 경매에 입찰이
+                              // 들어가 뒤에서 오류가 나는 상황을 확실히 막아요.
+                              final isOwnAuction = (product.sellerId != null && product.sellerId!.isNotEmpty)
+                                  ? product.sellerId == currentUser.uid
+                                  : (product.sellerName.trim().isNotEmpty &&
+                                      product.sellerName.trim() == (currentUser.displayName ?? '').trim());
+                              if (isOwnAuction) {
                                 setSheetState(() => bidErrorText = '내가 등록한 상품에는 입찰할 수 없습니다.');
                                 return;
                               }
@@ -751,9 +830,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               });
 
                               Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('${_formatPrice(amount)} 입찰이 완료됐어요.')),
-                              );
+
+                              // 마감 5분 이내에 최고가로 입찰하면(=안티스나이핑 연장이
+                              // 걸리면), 5분 내 상위입찰이 없으면 낙찰되고 알림을 보내준다는
+                              // 안내 팝업을 띄워요. 그 외에는 기존처럼 스낵바로 안내해요.
+                              final end = product.endAt;
+                              final inFinalWindow = end != null &&
+                                  !end.difference(DuckAuctionStore.devNow()).isNegative &&
+                                  end.difference(DuckAuctionStore.devNow()) <= const Duration(minutes: 5);
+                              if (!result.outbidByAutoBid && inFinalWindow && mounted) {
+                                await _showAntiSnipeDialog(context);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      result.outbidByAutoBid
+                                          ? (result.message ?? '입찰이 접수됐지만 상대방의 예약입찰에 밀렸어요.')
+                                          : '${_formatPrice(amount)} 입찰이 완료됐어요.',
+                                    ),
+                                  ),
+                                );
+                              }
                             },
                       child: isSubmitting
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -766,6 +863,36 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           },
         );
       },
+    );
+  }
+
+  /// 막판(마감 5분 이내) 최고가 입찰 시 뜨는 안내 팝업이에요. 마감이 5분
+  /// 연장됐고, 5분 내 상위입찰이 없으면 낙찰되며 알림을 보내준다고 안내해요.
+  /// '알림 받고 닫기'를 누르면 알림 권한을 확인해(꺼져 있으면 켜도록 안내) 낙찰
+  /// 알림을 놓치지 않게 해요.
+  Future<void> _showAntiSnipeDialog(BuildContext context) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('지금 최고 입찰자예요! 🎉', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text(
+          '마감 직전 입찰이라 마감이 5분 연장됐어요.\n'
+          '5분 동안 더 높은 입찰이 없으면 낙찰돼요.\n\n'
+          '낙찰되면 알림으로 알려드릴게요. 계속 지켜보지 않아도 괜찮아요.',
+          style: TextStyle(height: 1.5),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              PushNotificationService.instance.ensureNotificationConsent(context);
+            },
+            child: const Text('알림 받고 닫기'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -806,14 +933,12 @@ class _BidPolicyItem extends StatelessWidget {
 class _DetailBottomBar extends StatelessWidget {
   final ProductItem product;
   final int currentPrice;
-  final VoidCallback onOpenCart;
   final VoidCallback onChat;
   final VoidCallback onBid;
 
   const _DetailBottomBar({
     required this.product,
     required this.currentPrice,
-    required this.onOpenCart,
     required this.onChat,
     required this.onBid,
   });
@@ -821,6 +946,68 @@ class _DetailBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isClosed = !product.isAuctionActive;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final winnerUid = product.winnerId ?? product.lastBidUserId;
+    final isWinner = uid != null && winnerUid != null && uid == winnerUid;
+    final status = product.effectiveStatus;
+    // 낙찰자에게 '결제하기' 버튼을 보여줘요. 실제 낙찰 경매는 마감되면
+    // sold/ended 상태가 되므로(결제대기 winner_pending 외에도) 이 상태들도
+    // 포함해서, 목록의 '낙찰됐어요' 표시와 동일하게 낙찰자면 결제할 수 있게 해요.
+    final needsPayment = isWinner &&
+        (status == 'winner_pending' ||
+            status == 'second_pending' ||
+            status == 'third_pending' ||
+            status == 'sold' ||
+            status == 'ended');
+    final isBuyerFlow = isWinner &&
+        (status == 'paid' || status == 'shipped' || status == 'delivered' ||
+            status == 'completed' || status == 'cancelled');
+
+    final Widget primaryButton;
+    if (needsPayment) {
+      primaryButton = FilledButton.icon(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(double.infinity, 52),
+          backgroundColor: const Color(0xFFDB2777),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        onPressed: () => _openCheckout(context),
+        icon: const Icon(Icons.credit_card_rounded),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '결제하기 · ${DuckAuctionStore.formatWonFromInt(_payAmount())}',
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ),
+      );
+    } else if (isBuyerFlow) {
+      primaryButton = _buyerFlowButton(context, status);
+    } else {
+      primaryButton = FilledButton.icon(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(double.infinity, 52),
+          backgroundColor: const Color(0xFF334155),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        onPressed: isClosed ? null : onBid,
+        icon: Icon(isClosed ? Icons.lock_outline : Icons.gavel),
+        // 큰 글꼴(갤럭시 디스플레이 크게 등)에서도 '경...'처럼 잘리지 않고
+        // 버튼 폭에 맞춰 글자만 줄어들게 해요.
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            isClosed ? '${product.statusLabel}된 경매' : '입찰하기 · ${DuckAuctionStore.formatWonFromInt(currentPrice)}',
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFE5E7EB)))),
@@ -828,24 +1015,6 @@ class _DetailBottomBar extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            ValueListenableBuilder<List<ProductItem>>(
-              valueListenable: DuckAuctionStore.cartItems,
-              builder: (context, cartItems, _) {
-                final inCart = DuckAuctionStore.isInCart(product);
-                return IconButton.filledTonal(
-                  tooltip: inCart ? '장바구니에서 제거' : '장바구니 담기',
-                  style: IconButton.styleFrom(
-                    minimumSize: const Size(52, 52),
-                    backgroundColor: inCart ? const Color(0xFFF1F5F9) : const Color(0xFFF2F3F6),
-                    foregroundColor: inCart ? const Color(0xFF334155) : const Color(0xFF374151),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: onOpenCart,
-                  icon: Icon(inCart ? Icons.shopping_bag : Icons.shopping_bag_outlined),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
@@ -860,24 +1029,266 @@ class _DetailBottomBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
-                  backgroundColor: const Color(0xFF334155),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                onPressed: isClosed ? null : onBid,
-                icon: Icon(isClosed ? Icons.lock_outline : Icons.gavel),
-                label: Text(isClosed ? '${product.statusLabel}된 경매' : '입찰하기 · ${DuckAuctionStore.formatWonFromInt(currentPrice)}'),
-              ),
-            ),
+            Expanded(flex: 2, child: primaryButton),
           ],
         ),
       ),
     );
+  }
+
+  /// 낙찰자(구매자)에게 결제 이후 단계별로 다른 하단 버튼을 보여줘요.
+  ///   판매자 확인 전 → [판매자에게 확인요청]
+  ///   배송 준비중     → [배송 준비중] (대기, 비활성)
+  ///   배송중          → [배송조회] + [상품 받았어요]
+  ///   배송완료        → [배송조회] + [구매확정]
+  ///   거래완료        → [배송조회] + [거래완료](비활성)
+  ///   결제취소        → [결제취소됨] (비활성)
+  Widget _buyerFlowButton(BuildContext context, String status) {
+    if (status == 'cancelled') {
+      return _flowSolid('결제취소됨', const Color(0xFF94A3B8), Icons.cancel_outlined, null);
+    }
+    if (status == 'paid') {
+      final prepared = product.shippingPreparedAt != null;
+      if (prepared) {
+        // 판매자가 배송 준비를 시작했지만 아직 운송장 등록 전.
+        return _flowSolid('배송 준비중', const Color(0xFF6366F1), Icons.inventory_2_outlined, null);
+      }
+      // 결제완료 · 판매자 확인 전 → 판매자에게 확인 요청(배송 준비 재촉).
+      return _flowSolid(
+        '판매자에게 확인요청',
+        const Color(0xFFDB2777),
+        Icons.notifications_active_outlined,
+        () => _requestSellerConfirm(context),
+      );
+    }
+    if (status == 'shipped') {
+      return _flowPair(
+        trackingOnPressed: () => _showShipmentInfoSheet(context, product),
+        actionLabel: '상품 받았어요',
+        actionColor: const Color(0xFF0D9488),
+        actionIcon: Icons.inventory_rounded,
+        actionOnPressed: () => _markDelivered(context),
+      );
+    }
+    if (status == 'delivered') {
+      return _flowPair(
+        trackingOnPressed: () => _showShipmentInfoSheet(context, product),
+        actionLabel: '구매확정',
+        actionColor: const Color(0xFF16A34A),
+        actionIcon: Icons.verified_rounded,
+        actionOnPressed: () => _confirmPurchase(context),
+      );
+    }
+    // completed
+    return _flowPair(
+      trackingOnPressed: () => _showShipmentInfoSheet(context, product),
+      actionLabel: '거래완료',
+      actionColor: const Color(0xFF16A34A),
+      actionIcon: Icons.check_circle_rounded,
+      actionOnPressed: null,
+    );
+  }
+
+  Widget _flowSolid(String label, Color bg, IconData icon, VoidCallback? onPressed) {
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(double.infinity, 52),
+        backgroundColor: bg,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: bg,
+        disabledForegroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
+      label: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, softWrap: false)),
+    );
+  }
+
+  Widget _flowPair({
+    required VoidCallback trackingOnPressed,
+    required String actionLabel,
+    required Color actionColor,
+    required IconData actionIcon,
+    required VoidCallback? actionOnPressed,
+  }) {
+    return Row(children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            foregroundColor: const Color(0xFF16305C),
+            side: const BorderSide(color: Color(0xFFCBD5E1)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          onPressed: trackingOnPressed,
+          icon: const Icon(Icons.local_shipping_outlined, size: 18),
+          label: const FittedBox(fit: BoxFit.scaleDown, child: Text('배송조회', maxLines: 1, softWrap: false)),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            backgroundColor: actionColor,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: actionColor,
+            disabledForegroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          onPressed: actionOnPressed,
+          icon: Icon(actionIcon, size: 18),
+          label: FittedBox(fit: BoxFit.scaleDown, child: Text(actionLabel, maxLines: 1, softWrap: false)),
+        ),
+      ),
+    ]);
+  }
+
+  Future<void> _callBuyerFn(BuildContext context, String fn, String okMsg) async {
+    final productId = product.id;
+    if (productId == null) return;
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable(fn)
+          .call<Map<String, dynamic>>({'productId': productId});
+      await DuckAuctionStore.refreshProductsNow();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(okMsg)));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('처리에 실패했어요. 잠시 후 다시 시도해주세요.\n$e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _requestSellerConfirm(BuildContext context) =>
+      _callBuyerFn(context, 'requestSellerConfirm', '판매자에게 배송 준비 요청을 보냈어요.');
+
+  Future<void> _markDelivered(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('상품을 받으셨나요?', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text('수령을 표시하면 배송완료 상태로 바뀌어요. 상품을 확인한 뒤 구매확정을 진행할 수 있어요.', style: TextStyle(height: 1.5)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogCtx).pop(false), child: const Text('닫기')),
+          FilledButton(onPressed: () => Navigator.of(dialogCtx).pop(true), child: const Text('상품 받았어요')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await _callBuyerFn(context, 'markDelivered', '수령 확인했어요. 상품을 확인하고 구매확정을 눌러주세요.');
+  }
+
+  Future<void> _confirmPurchase(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('구매를 확정할까요?', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text('구매확정 후에는 거래가 완료돼요. 상품을 충분히 확인한 뒤 진행해주세요.', style: TextStyle(height: 1.5)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogCtx).pop(false), child: const Text('닫기')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF16A34A)),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: const Text('구매확정'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await _callBuyerFn(context, 'confirmPurchase', '구매확정이 완료됐어요. 거래가 종료됐어요. 🎉');
+  }
+
+  int _payAmount() {
+    final base =
+        product.currentPrice > 0 ? product.currentPrice : _digitsToInt(product.price);
+    return base + product.shippingFee;
+  }
+
+  static int _digitsToInt(String value) {
+    final digits =
+        RegExp(r'\d+').allMatches(value).map((m) => m.group(0)!).join();
+    return int.tryParse(digits) ?? 0;
+  }
+
+  static String _buildOrderId(String? productId) {
+    final pid = (productId == null || productId.isEmpty) ? 'NA' : productId;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final cleaned =
+        'DUCK-$pid-$ts'.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
+    return cleaned.length > 64
+        ? cleaned.substring(cleaned.length - 64)
+        : cleaned;
+  }
+
+  Future<void> _openCheckout(BuildContext context) async {
+    final amount = _payAmount();
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('결제 금액을 확인할 수 없어요.')),
+      );
+      return;
+    }
+    if (amount > kPgMaxPayableAmount) {
+      // 국내 PG 결제금액 한도(약 21.4억) 초과 → 이니시스 원문 에러 대신 친절히 안내.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('결제 가능 금액을 초과했어요. 이 금액은 카드 결제로 진행할 수 없어요.')),
+      );
+      return;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    // 웹은 웹뷰가 없으므로 결제 페이지(pay.html)로 이동해 이니시스 결제창을 띄워요.
+    // 결제 후 앱으로 돌아오면 스플래시의 결제 복귀 처리가 결과를 안내해요.
+    if (kIsWeb) {
+      await DuckAuctionStore.startWebCheckout(
+        orderId: _buildOrderId(product.id),
+        orderName: product.title,
+        amount: amount,
+        productId: product.id,
+      );
+      return;
+    }
+    final result = await Navigator.of(context).push<TossPaymentResult>(
+      MaterialPageRoute(
+        builder: (_) => TossCheckoutScreen(
+          orderId: _buildOrderId(product.id),
+          orderName: product.title,
+          amount: amount,
+          customerName: user?.displayName ?? '덕옥션 회원',
+          customerKey: user?.uid,
+          productId: product.id,
+        ),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    if (result.success) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('결제가 완료됐어요',
+              style: TextStyle(fontWeight: FontWeight.w900)),
+          content: const Text('결제가 정상적으로 처리됐어요.\n판매자와 배송 정보를 확인해주세요.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('확인'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message ?? '결제에 실패했어요.')),
+      );
+    }
   }
 }
 
@@ -1116,14 +1527,19 @@ class _DetailPriceCard extends StatelessWidget {
             style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.8),
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: _MiniStat(label: '입찰', value: '$bidCount명', icon: Icons.people_alt_outlined)),
-              const SizedBox(width: 8),
-              Expanded(child: _MiniStat(label: '남은 시간', value: timeRemaining, icon: Icons.schedule_rounded, accent: kAiAccent)),
-              const SizedBox(width: 8),
-              Expanded(child: _MiniStat(label: '마감', value: endAtText, icon: Icons.flag_outlined)),
-            ],
+          // IntrinsicHeight + stretch로 세 칸의 높이를 항상 똑같이 맞춰요
+          // (값 길이가 달라 한 칸만 두 줄이 돼도 나머지가 같이 늘어나 정렬돼요).
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _MiniStat(label: '입찰', value: '$bidCount명', icon: Icons.people_alt_outlined)),
+                const SizedBox(width: 8),
+                Expanded(child: _MiniStat(label: '남은 시간', value: timeRemaining, icon: Icons.schedule_rounded, accent: kAiAccent)),
+                const SizedBox(width: 8),
+                Expanded(child: _MiniStat(label: '마감', value: endAtText, icon: Icons.flag_outlined)),
+              ],
+            ),
           ),
         ],
       ),
@@ -1164,9 +1580,9 @@ class _AiRecommendationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            const Text('아직 AI 추천가가 없어요', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFBE123C))),
+            const Text('AI 추천가 기능을 준비하고 있어요', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFBE123C))),
             const SizedBox(height: 6),
-            const Text('유사 경매의 거래 데이터가 충분하지 않아 현재는 예상 가격을 안내하기 어려워요.', style: TextStyle(color: Color(0xFF9F1239), fontWeight: FontWeight.w700, height: 1.4)),
+            const Text('거래 데이터가 더 쌓이면 이 자리에서 예상 가격을 안내해드릴게요. 그 전까지는 다른 사이트에서 시세를 참고해주세요.', style: TextStyle(color: Color(0xFF9F1239), fontWeight: FontWeight.w700, height: 1.4)),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -1176,11 +1592,11 @@ class _AiRecommendationCard extends StatelessWidget {
                   final uri = Uri.parse('https://search.naver.com/search.naver?query=$query');
                   final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
                   if (!opened && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('네이버 검색을 열 수 없어요.')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('시세 검색 페이지를 열 수 없어요.')));
                   }
                 },
                 icon: const Icon(Icons.search_rounded),
-                label: const Text('네이버에서 시세 찾기'),
+                label: const Text('다른 사이트에서 시세 찾기'),
               ),
             ),
           ],
@@ -1284,6 +1700,7 @@ class _SellerProfileCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Flexible(
                       child: Text(
@@ -1293,8 +1710,29 @@ class _SellerProfileCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    SellerBadge(salesCount: product.sellerSalesCount),
+                    if (product.isSellerFirstListing) ...[
+                      const SizedBox(width: 6),
+                      const _SelectedSellerBadge(label: '🆕 NEW'),
+                    ],
+                    // 실제로 획득한 뱃지만(판매 횟수 기준) + 아이콘만 표시하고,
+                    // 탭하면 뱃지 이름이 뜨게 해서 화면이 잘리지 않게 했어요.
+                    for (final id in product.sellerBadgeIds
+                        .where(computeEarnedSellerBadges(
+                          isMaster: false,
+                          completedSales: product.sellerSalesCount,
+                          reviewCount: 0,
+                          rating: 0,
+                          followerCount: 0,
+                        ).contains)
+                        .take(4)) ...[
+                      const SizedBox(width: 5),
+                      Tooltip(
+                        message: sellerBadgeLabel(id),
+                        triggerMode: TooltipTriggerMode.tap,
+                        preferBelow: false,
+                        child: Text(sellerBadgeEmoji(id) ?? '', style: const TextStyle(fontSize: 15)),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -1351,9 +1789,447 @@ class _AuctionPolicyCard extends StatelessWidget {
           _InfoRow(label: '최소 희망가', value: _formatWonFromInt(product.hopePrice)),
           _InfoRow(label: '즉시 구매가', value: _formatWonFromInt(product.buyNowPrice)),
           _InfoRow(label: '배송비', value: product.shippingFee <= 0 ? '무료/미설정' : _formatWonFromInt(product.shippingFee)),
+          // 덕옥션 판매 수수료는 판매자 본인에게만 보여줘요.
+          if (FirebaseAuth.instance.currentUser?.uid == product.sellerId)
+            _InfoRow(label: '덕옥션 수수료', value: product.platformFeeLabel),
         ],
       ),
     );
+  }
+}
+
+/// 상품 상세의 "입찰내역" 카드입니다(기획서 9번).
+/// products/{id}/bids 서브컬렉션을 실시간 구독해서 닉네임 일부를 가린 채
+/// 입찰 금액/시간을 최신순으로 보여줍니다.
+class _BidHistoryCard extends StatelessWidget {
+  final ProductItem product;
+
+  const _BidHistoryCard({required this.product});
+
+  /// 닉네임의 첫 글자만 남기고 나머지는 '*'로 가립니다.
+  /// 예) "홍길동" -> "홍**", "duckfan" -> "d******"
+  static String _maskNickname(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '입찰자';
+    if (trimmed.length == 1) return '$trimmed*';
+    final maskedLength = (trimmed.length - 1).clamp(1, 6);
+    return '${trimmed.substring(0, 1)}${'*' * maskedLength}';
+  }
+
+  static String _formatBidTime(DateTime? value) {
+    if (value == null) return '방금 전';
+    final diff = DateTime.now().difference(value);
+    if (diff.inSeconds < 60) return '방금 전';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+    if (diff.inHours < 24) return '${diff.inHours}시간 전';
+    if (diff.inDays < 7) return '${diff.inDays}일 전';
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$month.$day $hour:$minute';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final productId = product.id;
+    if (productId == null || productId.isEmpty) {
+      // 등록 직후라 아직 서버에 저장되지 않은 상품(로컬 임시 상품)에는
+      // 입찰내역 서브컬렉션 자체가 없으므로 카드를 표시하지 않습니다.
+      return const SizedBox.shrink();
+    }
+
+    return _DetailCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('입찰내역', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 14),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('products')
+                .doc(productId)
+                .collection('bids')
+                .orderBy('createdAt', descending: true)
+                .limit(30)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text(
+                  '입찰내역을 불러오지 못했어요.',
+                  style: TextStyle(color: Color(0xFF9CA3AF), fontWeight: FontWeight.w600),
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              }
+
+              final docs = snapshot.data!.docs;
+              if (docs.isEmpty) {
+                return const Text(
+                  '아직 입찰 내역이 없어요. 첫 입찰의 주인공이 되어보세요!',
+                  style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w600),
+                );
+              }
+
+              return Column(
+                children: List.generate(docs.length, (index) {
+                  final data = docs[index].data();
+                  final rawAmount = data['amount'];
+                  final amount = rawAmount is num ? rawAmount.toInt() : int.tryParse('$rawAmount') ?? 0;
+                  final userName = (data['userName'] as String?) ?? '입찰자';
+                  final rawCreatedAt = data['createdAt'];
+                  final createdAt = rawCreatedAt is Timestamp ? rawCreatedAt.toDate() : null;
+                  final isAutoBid = data['isAutoBid'] == true;
+                  final isTopBid = index == 0;
+
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: index == docs.length - 1 ? 0 : 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 10),
+                          decoration: BoxDecoration(
+                            color: isTopBid ? const Color(0xFFF97316) : const Color(0xFFCBD5E1),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _maskNickname(userName),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF374151)),
+                                ),
+                              ),
+                              if (isAutoBid) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    '자동',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF2563EB)),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Text(
+                          DuckAuctionStore.formatWonFromInt(amount),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: isTopBid ? const Color(0xFFF97316) : const Color(0xFF111827),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 62,
+                          child: Text(
+                            _formatBidTime(createdAt),
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 상품 상세의 "예약입찰(자동입찰)" 카드입니다(기획서 8번).
+/// 로그인한 사용자 본인의 자동입찰 상태(products/{id}/autoBids/{uid})를
+/// 실시간으로 보여주고, 등록/취소를 여기서 처리합니다.
+class _AutoBidCard extends StatelessWidget {
+  final ProductItem product;
+
+  const _AutoBidCard({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final productId = product.id;
+    final user = FirebaseAuth.instance.currentUser;
+    if (productId == null || productId.isEmpty) return const SizedBox.shrink();
+    if (user == null || user.isAnonymous) return const SizedBox.shrink();
+    if (product.sellerId != null && product.sellerId == user.uid) return const SizedBox.shrink();
+    if (!product.isAuctionActive) return const SizedBox.shrink();
+
+    final isLeading = product.lastBidUserId == user.uid;
+
+    return _DetailCard(
+      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('products')
+            .doc(productId)
+            .collection('autoBids')
+            .doc(user.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          final data = snapshot.data?.data();
+          final status = data?['status'] as String?;
+          final hasActiveAutoBid = status == 'active';
+          final rawMaxAmount = data?['maxAmount'];
+          final maxAmountValue = rawMaxAmount is num ? rawMaxAmount.toInt() : 0;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.bolt_rounded, color: Color(0xFFF97316), size: 20),
+                  SizedBox(width: 6),
+                  Text('예약입찰(자동입찰)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '최대 금액을 정해두면, 다른 사람이 더 높게 입찰할 때마다 그 금액 안에서 자동으로 응찰해드려요.',
+                style: TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), fontWeight: FontWeight.w600, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              if (hasActiveAutoBid)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isLeading ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: isLeading ? const Color(0xFFBBF7D0) : const Color(0xFFE5E7EB)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isLeading ? '현재 1위로 방어 중이에요' : '대기 중이에요 (2위 이하)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: isLeading ? const Color(0xFF15803D) : const Color(0xFF334155),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '최대 ${DuckAuctionStore.formatWonFromInt(maxAmountValue)}까지 자동 응찰',
+                              style: const TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isLeading)
+                        TextButton(
+                          onPressed: () => _cancel(context, product),
+                          child: const Text('취소'),
+                        ),
+                    ],
+                  ),
+                )
+              else ...[
+                if (status == 'exceeded')
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      '이전 예약입찰은 한도를 넘어서 종료됐어요. 최대 금액을 올려 다시 등록할 수 있어요.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFFDC2626), fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      foregroundColor: const Color(0xFF334155),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => _register(context, product),
+                    icon: const Icon(Icons.bolt_outlined, size: 18),
+                    label: const Text('예약입찰 등록하기'),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _register(BuildContext context, ProductItem product) async {
+    if (await _needsTradeVerification()) {
+      final ready = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const TradeReadinessScreen()),
+      );
+      if (ready != true || !context.mounted) return;
+    }
+    if (!context.mounted) return;
+
+    final controller = TextEditingController();
+    final bidUnit = DuckAuctionStore.parseBidUnit(product.bidUnit);
+    final minAmount = product.currentPrice + bidUnit;
+    bool isSubmitting = false;
+    String? errorText;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sbContext, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(18, 18, 18, 20 + MediaQuery.of(sbContext).viewInsets.bottom),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 42,
+                        height: 4,
+                        decoration: BoxDecoration(color: const Color(0xFFD1D5DB), borderRadius: BorderRadius.circular(999)),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text('예약입찰(자동입찰) 등록', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${product.title} · 현재가 ${DuckAuctionStore.formatWonFromInt(product.currentPrice)}',
+                      style: const TextStyle(color: Color(0xFF4B5563), fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '입력한 금액까지만 자동으로 입찰해요. 실제로는 이기는 데 필요한 만큼만 올라가고, 입력한 금액 자체는 다른 사람에게 공개되지 않아요.',
+                            style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), fontWeight: FontWeight.w700, height: 1.4),
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            '경매 종료 전에는 취소할 수 있지만, 현재 1위로 방어 중일 때는 취소할 수 없어요. 최대 금액이 같으면 먼저 등록한 사람이 우선이에요.',
+                            style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B), fontWeight: FontWeight.w700, height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) {
+                        if (errorText != null) setSheetState(() => errorText = null);
+                      },
+                      decoration: InputDecoration(
+                        hintText: '예: ${DuckAuctionStore.formatWonFromInt(minAmount).replaceAll('원', '')}',
+                        suffixText: '원',
+                        errorText: errorText,
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFEF4444))),
+                        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.4)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 52),
+                        backgroundColor: const Color(0xFF334155),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final raw = controller.text.replaceAll(RegExp(r'[^0-9]'), '');
+                              final amount = int.tryParse(raw) ?? 0;
+                              if (amount < minAmount) {
+                                setSheetState(() => errorText = '최소 ${DuckAuctionStore.formatWonFromInt(minAmount)} 이상 입력해주세요.');
+                                return;
+                              }
+
+                              setSheetState(() => isSubmitting = true);
+                              final result = await DuckAuctionStore.registerAutoBid(product: product, maxAmount: amount);
+                              if (!sbContext.mounted) return;
+                              setSheetState(() => isSubmitting = false);
+
+                              if (!result.success) {
+                                setSheetState(() => errorText = result.message);
+                                return;
+                              }
+
+                              Navigator.pop(sheetContext);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message)));
+                              }
+                            },
+                      child: isSubmitting
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Text('등록하기'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _cancel(BuildContext context, ProductItem product) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('예약입찰 취소'),
+        content: const Text('등록해둔 예약입찰을 취소할까요? 취소하면 더 이상 자동으로 응찰하지 않아요.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('아니요')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('취소하기')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final result = await DuckAuctionStore.cancelAutoBid(product);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message)));
   }
 }
 
@@ -1530,7 +2406,7 @@ class _MiniStat extends StatelessWidget {
           const SizedBox(height: 7),
           Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: Color(0xFF111827), fontWeight: FontWeight.w900)),
+          Text(value, softWrap: true, style: const TextStyle(fontSize: 13, color: Color(0xFF111827), fontWeight: FontWeight.w900, height: 1.25)),
         ],
       ),
     );
@@ -1683,9 +2559,29 @@ class SellerProfileScreen extends StatelessWidget {
         final followerCount = (data['followerCount'] as num?)?.toInt() ?? 0;
         final followingCount = (data['followingCount'] as num?)?.toInt() ?? 0;
         final recentAccessText = (data['lastSeenAt'] is Timestamp) ? '최근 접속' : '-';
+        // 이 판매자가 실제로 획득한 배지만 노출해요(기준 미달 배지는 숨김).
+        final sellerEarnedBadges = computeEarnedSellerBadges(
+          isMaster: isMaster,
+          completedSales: (data['completedTradeCount'] as num?)?.toInt() ?? 0,
+          reviewCount: (data['reviewCount'] as num?)?.toInt() ?? 0,
+          rating: (data['rating'] as num?)?.toDouble() ?? 0.0,
+          followerCount: followerCount,
+        );
+        final visibleBadges = badges.where(sellerEarnedBadges.contains).toList();
 
         return Scaffold(
           backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.white,
+            elevation: 0,
+            foregroundColor: const Color(0xFF1F2937),
+            title: const Text('판매자 프로필', style: TextStyle(fontWeight: FontWeight.w900)),
+            actions: [
+              IconButton(onPressed: () {}, icon: const Icon(Icons.ios_share_rounded)),
+              IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert_rounded)),
+            ],
+          ),
           body: ValueListenableBuilder<List<ProductItem>>(
             valueListenable: DuckAuctionStore.registeredAuctions,
             builder: (context, products, _) {
@@ -1697,146 +2593,137 @@ class SellerProfileScreen extends StatelessWidget {
               final completed = sellerProducts.where((item) => item.effectiveStatus == 'completed' || item.effectiveStatus == 'sold').length;
               final rating = _rating(seller.sellerSalesCount);
 
-              return CustomScrollView(
-                slivers: [
-                  SliverAppBar(
-                    expandedHeight: 235,
-                    pinned: true,
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.white,
-                    title: const Text('판매자 프로필', style: TextStyle(fontWeight: FontWeight.w900)),
-                    actions: [
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.ios_share_rounded)),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert_rounded)),
-                    ],
-                    flexibleSpace: FlexibleSpaceBar(
-                      collapseMode: CollapseMode.parallax,
-                      background: ClipRect(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Positioned.fill(child: _coverImage(profileCoverImageUrl)),
-                            Positioned.fill(child: ColoredBox(color: Color(0x4D000000))),
-                          ],
+              return ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.topCenter,
+                    children: [
+                      ClipRect(
+                        child: SizedBox(
+                          height: 185,
+                          width: double.infinity,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _coverImage(profileCoverImageUrl),
+                              const ColoredBox(color: Color(0x4D000000)),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.topCenter,
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(0, 138, 0, 0),
+                        padding: const EdgeInsets.fromLTRB(20, 66, 20, 20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 8))],
+                        ),
+                        child: Column(
                           children: [
+                            Text(nickname.isEmpty ? '덕친' : nickname, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 8),
+                            if (visibleBadges.isNotEmpty)
+                              SizedBox(height: 34, child: ListView(scrollDirection: Axis.horizontal, shrinkWrap: true, children: visibleBadges.map((id) => Padding(padding: const EdgeInsets.only(right: 6), child: _SelectedSellerBadge(label: sellerBadgeLabel(id)))).toList())),
+                            const SizedBox(height: 13),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('🐥', style: TextStyle(fontSize: 20)),
+                                const SizedBox(width: 4),
+                                Text(rating, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                                const SizedBox(width: 12),
+                                Text('판매완료 $completed건', style: const TextStyle(color: Color(0xFF475569), fontWeight: FontWeight.w800)),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
                             Container(
-                              width: double.infinity,
-                              margin: const EdgeInsets.only(top: 0),
-                              padding: const EdgeInsets.fromLTRB(20, 72, 20, 20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                                border: Border.all(color: const Color(0xFFE5E7EB)),
-                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 8))],
-                              ),
-                              child: Column(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE5E7EB)), borderRadius: BorderRadius.circular(18)),
+                              child: Row(
                                 children: [
-                                  Text(nickname.isEmpty ? '덕친' : nickname, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                                  const SizedBox(height: 8),
-                                  if (badges.isNotEmpty)
-                                    SizedBox(height: 34, child: ListView(scrollDirection: Axis.horizontal, shrinkWrap: true, children: badges.map((id) => Padding(padding: const EdgeInsets.only(right: 6), child: _SelectedSellerBadge(label: sellerBadgeLabel(id)))).toList()))
-                                  else
-                                    SellerBadge(salesCount: seller.sellerSalesCount),
-                                  const SizedBox(height: 13),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text('🐥', style: TextStyle(fontSize: 20)),
-                                      const SizedBox(width: 4),
-                                      Text(rating, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                                      const SizedBox(width: 12),
-                                      Text('판매완료 $completed건', style: const TextStyle(color: Color(0xFF475569), fontWeight: FontWeight.w800)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 18),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE5E7EB)), borderRadius: BorderRadius.circular(18)),
-                                    child: Row(
-                                      children: [
-                                        Expanded(child: _SellerProfileStat(icon: Icons.calendar_month_outlined, label: '가입일', value: joinedText)),
-                                        const _ProfileDivider(),
-                                        Expanded(child: _SellerProfileStat(icon: Icons.schedule_rounded, label: '최근 접속', value: recentAccessText)),
-                                        const _ProfileDivider(),
-                                        Expanded(child: _SellerProfileStat(icon: Icons.people_outline_rounded, label: '팔로워', value: '$followerCount', onTap: sellerId == null || sellerId.isEmpty ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FollowListScreen(userId: sellerId, mode: FollowListMode.followers, title: '${nickname.isEmpty ? '덕친' : nickname}의 팔로워'))))),
-                                        const _ProfileDivider(),
-                                        Expanded(child: _SellerProfileStat(icon: Icons.person_add_alt_1_outlined, label: '팔로잉', value: '$followingCount', onTap: sellerId == null || sellerId.isEmpty ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FollowListScreen(userId: sellerId, mode: FollowListMode.following, title: '${nickname.isEmpty ? '덕친' : nickname}의 팔로잉'))))),
-                                      ],
-                                    ),
-                                  ),
+                                  Expanded(child: _SellerProfileStat(icon: Icons.calendar_month_outlined, label: '가입일', value: joinedText)),
+                                  const _ProfileDivider(),
+                                  Expanded(child: _SellerProfileStat(icon: Icons.schedule_rounded, label: '최근 접속', value: recentAccessText)),
+                                  const _ProfileDivider(),
+                                  Expanded(child: _SellerProfileStat(icon: Icons.people_outline_rounded, label: '팔로워', value: '$followerCount', onTap: sellerId == null || sellerId.isEmpty ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FollowListScreen(userId: sellerId, mode: FollowListMode.followers, title: '${nickname.isEmpty ? '덕친' : nickname}의 팔로워'))))),
+                                  const _ProfileDivider(),
+                                  Expanded(child: _SellerProfileStat(icon: Icons.person_add_alt_1_outlined, label: '팔로잉', value: '$followingCount', onTap: sellerId == null || sellerId.isEmpty ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FollowListScreen(userId: sellerId, mode: FollowListMode.following, title: '${nickname.isEmpty ? '덕친' : nickname}의 팔로잉'))))),
                                 ],
                               ),
                             ),
-                            Positioned(
-                              top: -51,
-                              child: Container(
-                                width: 102,
-                                height: 102,
-                                clipBehavior: Clip.antiAlias,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: const Color(0xFFF1F5F9),
-                                  border: Border.all(color: Colors.white, width: 5),
-                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 5))],
-                                ),
-                                child: _profileAvatar(profileImageUrl),
-                              ),
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        _ProfileSection(
-                          title: '판매자 소개',
-                          child: Text(
-                            intro.isEmpty ? '안녕하세요! 좋은 거래 약속드릴게요 😊\n꼼꼼한 포장과 빠른 답변으로 거래할게요.' : intro,
-                            style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700, height: 1.5),
+                      ),
+                      Positioned(
+                        top: 88,
+                        child: Container(
+                          width: 104,
+                          height: 104,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFF1F5F9),
+                            border: Border.all(color: Colors.white, width: 5),
+                            image: (profileImageUrl != null && profileImageUrl.trim().isNotEmpty)
+                                ? DecorationImage(image: NetworkImage(profileImageUrl.trim()), fit: BoxFit.cover)
+                                : null,
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 16, offset: const Offset(0, 5))],
                           ),
+                          child: (profileImageUrl == null || profileImageUrl.trim().isEmpty)
+                              ? const Center(child: Text('🐥', style: TextStyle(fontSize: 45)))
+                              : null,
                         ),
-                        _ProfileSection(
-                          title: '판매자 배지',
-                          child: badges.isEmpty
-                              ? Wrap(spacing: 8, runSpacing: 8, children: [SellerBadge(salesCount: seller.sellerSalesCount)])
-                              : SizedBox(height: 34, child: ListView(scrollDirection: Axis.horizontal, children: badges.map((id) => Padding(padding: const EdgeInsets.only(right: 6), child: _SelectedSellerBadge(label: sellerBadgeLabel(id)))).toList())),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                          child: Row(children: [
-                            const Expanded(child: Text('판매자의 경매', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
-                            Text('${active.length}개', style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w800)),
-                          ]),
-                        ),
-                        if (active.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16),
-                            child: _DetailCard(child: Text('현재 진행 중인 경매가 없어요.', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700))),
-                          )
-                        else
-                          ...active.map((item) => Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: ProductListTile(product: item))),
-                        _ProfileSection(
-                          title: '거래 후기',
-                          trailing: isMaster ? '🐥 4.8 / 5.0' : (rating == '신규' ? null : '🐥 $rating / 5.0'),
-                          child: _SellerReviewTabs(sellerUid: sellerId, isMaster: isMaster),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 30),
-                          child: Row(children: [
-                            Expanded(child: _FollowButton(sellerId: sellerId, sellerName: nickname.isEmpty ? '덕친' : nickname)),
-                            const SizedBox(width: 10),
-                            Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chat_bubble_outline_rounded), label: const Text('채팅하기'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), foregroundColor: const Color(0xFFE91E63)))),
-                          ]),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  _ProfileSection(
+                    title: '판매자 소개',
+                    child: Text(
+                      intro.isEmpty ? '안녕하세요! 좋은 거래 약속드릴게요 😊\n꼼꼼한 포장과 빠른 답변으로 거래할게요.' : intro,
+                      style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700, height: 1.5),
                     ),
+                  ),
+                  _ProfileSection(
+                    title: '판매자 배지',
+                    child: visibleBadges.isEmpty
+                        ? const Text(
+                            '아직 설정한 배지가 없어요.',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w700),
+                          )
+                        : SizedBox(height: 34, child: ListView(scrollDirection: Axis.horizontal, children: visibleBadges.map((id) => Padding(padding: const EdgeInsets.only(right: 6), child: _SelectedSellerBadge(label: sellerBadgeLabel(id)))).toList())),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                    child: Row(children: [
+                      const Expanded(child: Text('판매자의 경매', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
+                      Text('${active.length}개', style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w800)),
+                    ]),
+                  ),
+                  if (active.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: _DetailCard(child: Text('현재 진행 중인 경매가 없어요.', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700))),
+                    )
+                  else
+                    ...active.map((item) => Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: ProductListTile(product: item))),
+                  _ProfileSection(
+                    title: '거래 후기',
+                    trailing: isMaster ? '🐥 4.8 / 5.0' : (rating == '신규' ? null : '🐥 $rating / 5.0'),
+                    child: _SellerReviewTabs(sellerUid: sellerId, isMaster: isMaster),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 30),
+                    child: Row(children: [
+                      Expanded(child: _FollowButton(sellerId: sellerId, sellerName: nickname.isEmpty ? '덕친' : nickname)),
+                      const SizedBox(width: 10),
+                      Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chat_bubble_outline_rounded), label: const Text('채팅하기'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), foregroundColor: const Color(0xFFE91E63)))),
+                    ]),
                   ),
                 ],
               );
@@ -2136,39 +3023,3 @@ class _SellerReviewTabsState extends State<_SellerReviewTabs> {
   }
 }
 
-class SellerBadge extends StatelessWidget {
-  final int salesCount;
-
-  const SellerBadge({super.key, required this.salesCount});
-
-  String get label {
-    if (salesCount >= 300) return '👑 파워 판매자';
-    if (salesCount >= 100) return '🏅 인기 판매자';
-    if (salesCount >= 50) return '✅ 믿음 판매자';
-    if (salesCount >= 10) return '🌱 새싹 판매자';
-    return '첫 판매 도전';
-  }
-
-  Color get color {
-    if (salesCount >= 300) return const Color(0xFFFFF1F2);
-    if (salesCount >= 100) return const Color(0xFFFFF7ED);
-    if (salesCount >= 50) return const Color(0xFFF0FDF4);
-    return const Color(0xFFF1F5F9);
-  }
-
-  Color get textColor {
-    if (salesCount >= 300) return const Color(0xFFBE123C);
-    if (salesCount >= 100) return const Color(0xFFC2410C);
-    if (salesCount >= 50) return const Color(0xFF15803D);
-    return const Color(0xFF475569);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
-      child: Text(label, style: TextStyle(fontSize: 11, color: textColor, fontWeight: FontWeight.w900)),
-    );
-  }
-}

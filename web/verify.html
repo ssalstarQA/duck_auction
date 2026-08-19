@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>덕옥션 본인인증 (KG이니시스)</title>
+<meta name="robots" content="noindex">
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: #F8FAFC; color: #16305C; }
+  .wrap { max-width: 460px; margin: 0 auto; padding: 40px 20px; }
+  .card { background: #fff; border: 1px solid #E5E7EB; border-radius: 18px; padding: 26px 22px; box-shadow: 0 6px 24px rgba(22,48,92,0.06); }
+  .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .brand span { font-weight: 900; font-size: 18px; }
+  .result { text-align: center; padding: 10px 0; }
+  .result .ic { font-size: 44px; }
+  .result h2 { font-size: 20px; margin: 10px 0 6px; }
+  .result p { color: #64748B; font-size: 13.5px; word-break: break-all; margin: 4px 0; }
+  .btn { width: 100%; height: 54px; border: 0; border-radius: 14px; background: #16305C; color: #fff; font-size: 16px; font-weight: 800; margin-top: 22px; cursor: pointer; }
+  .note { color: #94A3B8; font-size: 12px; margin-top: 18px; line-height: 1.6; text-align: center; }
+  a { color: #16305C; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="brand"><img src="icons/Icon-192.png" alt="덕옥션"><span>덕옥션</span></div>
+    <div id="view">
+      <div class="result"><div class="ic">🪪</div><h2>본인인증 창을 여는 중…</h2>
+      <p>KG이니시스 본인인증(통합인증) 창이 열립니다.</p></div>
+    </div>
+  </div>
+  <div class="note">
+    본 페이지는 판매자 본인인증(KG이니시스 통합인증) 확인용 화면입니다.<br>
+    상호: 덕옥션 · 대표: 이현선 · 사업자등록번호 748-15-02875<br>
+    문의: <a href="mailto:micket0012@gmail.com">micket0012@gmail.com</a> · 010-4553-0838<br>
+    <a href="terms.html">이용약관</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="refund.html">환불·취소·청약철회</a>
+  </div>
+</div>
+
+<script>
+  var STORE_ID = "store-d2a85cca-0b2d-4562-9f2f-bcfb98ffc83b";
+  // KG이니시스 '통합인증'(본인인증) 테스트 채널키.
+  // ⚠️ 정식 오픈 시 포트원 콘솔의 '운영(실연동)' 통합인증 채널키로 교체.
+  var CHANNEL_KEY = "channel-key-a1d19937-77ac-47f0-9299-ef5928f3d030";
+
+  var view = document.getElementById("view");
+  var params = new URLSearchParams(location.search);
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[<>&"]/g, function (c) { return {"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c]; }); }
+
+  // 앱(웹)에서 넘어온 본인인증: 인증창을 열고, 끝나면 앱으로 복귀(?idvDone=1)해요.
+  async function verify() {
+    var idvId = params.get("identityVerificationId") || ("duckauction-idv-" + Date.now());
+    var back = location.origin + "/?idvDone=1";
+    try {
+      var response = await PortOne.requestIdentityVerification({
+        storeId: STORE_ID,
+        identityVerificationId: idvId,
+        channelKey: CHANNEL_KEY,
+        redirectUrl: back,
+        bypass: { inicis_unified: { flgFixedUser: "N" } }
+      });
+      // PC 등에서 결과가 바로 반환되면 수동으로 앱에 복귀시켜요(모바일은 자동 리다이렉트).
+      if (response) {
+        if (response.code) {
+          location.href = back + "&code=" + encodeURIComponent(response.code) + "&message=" + encodeURIComponent(response.message || "");
+        } else {
+          location.href = back + "&identityVerificationId=" + encodeURIComponent(response.identityVerificationId || idvId);
+        }
+      }
+    } catch (e) {
+      location.href = back + "&code=ERROR&message=" + encodeURIComponent((e && e.message) ? e.message : "본인인증 창을 불러오지 못했어요.");
+    }
+  }
+
+  // code/identityVerificationId가 이미 붙어 돌아온 경우(데모 확인용) 결과만 표시.
+  var returnedCode = params.get("code");
+  var returnedId = params.get("identityVerificationId");
+  if (returnedCode) {
+    view.innerHTML = '<div class="result"><div class="ic">⚠️</div><h2>본인인증이 완료되지 않았어요</h2>' +
+      '<p>' + esc(params.get("message") || "취소되었어요.") + '</p></div>' +
+      '<button class="btn" onclick="location.href=\'verify.html\'">다시 시도</button>';
+  } else if (returnedId && params.get("idvDone") !== "1") {
+    view.innerHTML = '<div class="result"><div class="ic">✅</div><h2>본인인증이 확인되었어요</h2>' +
+      '<p>인증번호: ' + esc(returnedId) + '</p></div>';
+  } else {
+    verify();
+  }
+</script>
+</body>
+</html>

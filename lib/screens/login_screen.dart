@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../utils/responsive.dart';
 import 'email_login_screen.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
@@ -24,7 +25,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFFFFFFF),
       body: SafeArea(
         child: Container(
           width: double.infinity,
@@ -36,12 +37,14 @@ class LoginScreen extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [
                 Color(0xFFFFFFFF),
-                Color(0xFFF8FAFC),
+                Color(0xFFF4F7FC),
               ],
             ),
           ),
-          child: Center(
-            child: SingleChildScrollView(
+          child: SingleChildScrollView(
+            child: ResponsiveContentBounds(
+              maxWidth: context.responsive(phone: double.infinity, tablet: 420.0),
+              padding: EdgeInsets.zero,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -248,7 +251,7 @@ class _EmailActionButton extends StatelessWidget {
       child: filled
           ? FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF334155),
+                backgroundColor: const Color(0xFF16305C),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
@@ -257,7 +260,7 @@ class _EmailActionButton extends StatelessWidget {
             )
           : OutlinedButton(
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF334155),
+                foregroundColor: const Color(0xFF16305C),
                 side: const BorderSide(color: Color(0xFFCBD5E1)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),

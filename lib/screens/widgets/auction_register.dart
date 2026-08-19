@@ -16,10 +16,9 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _tagController = TextEditingController();
-  final _shippingFeeController = TextEditingController(text: '3000');
+  final _shippingFeeController = TextEditingController(text: '1900');
   final _hopePriceController = TextEditingController();
   final _startPriceController = TextEditingController();
-  final _buyNowPriceController = TextEditingController();
   final _startPriceFocusNode = FocusNode();
 
   final List<String> _existingImageUrls = <String>[];
@@ -30,34 +29,74 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
   bool get _isEditMode => widget.editProduct != null && !widget.registerAsNew;
 
   String _category = '치이카와';
+  String _kujiGrade = AppCategories.kujiGradeUpper;
+  String _itemType = AppCategories.itemTypeEtc;
   String _condition = '미개봉';
   String _auctionType = '일반 경매';
   String _period = '24시간';
   String _bidUnit = '1,000원';
+  String _shippingOption = _shipHalf;
   bool _useAiPrice = false;
+  // AI 추천가: 서버(recommendPrice)가 내부 거래 데이터 + 네이버 쇼핑 + OpenAI
+  // 웹검색을 종합해 계산해요. 서버가 값을 못 내면 규칙 기반 추정가로 폴백합니다.
+  bool _aiComputed = false;
+  int _aiSampleCount = 0;
+  int? _aiDataPrice; // null이면 데이터 부족 → 규칙 기반 폴백
   bool _lowestAuctionAgreement = false;
   bool _isSubmitting = false;
   int _coverImageIndex = 0;
 
-  static const _categories = ['치이카와', '산리오', '진격의 거인', '디즈니', '포켓몬', '레고', '건담', '기타'];
+  // AppCategories.names(product_item.dart)가 카테고리 목록의 단일 기준이고,
+  // 여기서는 '기타' 선택지만 하나 더 붙여요.
+  static final List<String> _categories = [...AppCategories.names, AppCategories.etc];
   static const _conditions = ['미개봉', '개봉', '사용감 있음'];
   static const _auctionTypes = ['일반 경매', '최저가 경매'];
   static const _periods = ['12시간', '24시간', '3일', '7일'];
   static const _bidUnits = ['100원', '500원', '1,000원', '5,000원'];
 
+  // 배송 방식 — 무료배송, 그리고 반값택배·일반택배는 각 범위 내에서 직접 입력.
+  static const String _shipFree = '무료배송';
+  static const String _shipHalf = '반값택배';
+  static const String _shipNormal = '일반택배';
+  static const List<String> _shippingOptions = [_shipFree, _shipHalf, _shipNormal];
+  // 각 배송 방식의 허용 입력 범위(원).
+  static const Map<String, (int, int)> _shippingRanges = {
+    _shipHalf: (1500, 2000),
+    _shipNormal: (3000, 4000),
+  };
+  // 방식 선택 시 채워줄 기본값.
+  static const Map<String, int> _shippingDefaults = {_shipHalf: 1900, _shipNormal: 3500};
+
+  String _shipRangeHint(String option) {
+    final r = _shippingRanges[option];
+    if (r == null) return '';
+    return '${_formatWonFromInt(r.$1)} ~ ${_formatWonFromInt(r.$2)}';
+  }
+
   @override
   void initState() {
     super.initState();
+    // 이벤트(수수료 무료) 설정을 최신으로 읽어와, 등록 화면 상단 안내 배지에
+    // 반영해요. 결과는 eventFeeConfig ValueNotifier로 전달돼요.
+    DuckAuctionStore.loadEventFeeConfig();
     _titleController.addListener(_refreshAiPrice);
     final edit = widget.editProduct;
     if (edit != null) {
       _titleController.text = edit.title;
       _descriptionController.text = edit.description;
       _tagController.text = edit.tags.join(', ');
-      _shippingFeeController.text = edit.shippingFee.toString();
+      // 저장된 배송비로 방식을 추정해요: 0이면 무료, 반값 범위면 반값, 그 외 일반.
+      final savedFee = edit.shippingFee;
+      _shippingFeeController.text = savedFee.toString();
+      if (savedFee <= 0) {
+        _shippingOption = _shipFree;
+      } else if (savedFee >= _shippingRanges[_shipHalf]!.$1 && savedFee <= _shippingRanges[_shipHalf]!.$2) {
+        _shippingOption = _shipHalf;
+      } else {
+        _shippingOption = _shipNormal;
+      }
       _hopePriceController.text = edit.hopePrice > 0 ? edit.hopePrice.toString() : '';
       _startPriceController.text = edit.startPrice > 0 ? edit.startPrice.toString() : '';
-      _buyNowPriceController.text = edit.buyNowPrice > 0 ? edit.buyNowPrice.toString() : '';
       _existingImageUrls.addAll(edit.resolvedImageUrls);
       // 수정 화면에서는 기존 사진 URL이 느리게 로드되거나 웹 권한/CORS 문제로
       // 실패할 수 있어요. 등록 직후 로컬에 남아있는 이미지 bytes가 있으면
@@ -67,6 +106,8 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
         _existingPreviewBytesList.add(edit.imageBytes!);
       }
       _category = edit.category;
+      _kujiGrade = edit.kujiGrade ?? AppCategories.kujiGradeUpper;
+      _itemType = edit.itemType;
       _condition = edit.condition;
       _auctionType = edit.auctionType == 'lowest' ? '최저가 경매' : '일반 경매';
       _bidUnit = edit.bidUnit;
@@ -86,7 +127,6 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
     _shippingFeeController.dispose();
     _hopePriceController.dispose();
     _startPriceController.dispose();
-    _buyNowPriceController.dispose();
     _startPriceFocusNode.dispose();
     super.dispose();
   }
@@ -116,15 +156,16 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
   }
 
   int get _aiRecommendedPrice {
+    // 실제 거래 데이터 기반 값이 있으면 그걸 우선 사용해요.
+    if (_aiDataPrice != null) return _aiDataPrice!;
     final title = _titleController.text.trim();
     final baseByCategory = {
       '치이카와': 14000,
       '산리오': 9000,
       '진격의 거인': 26000,
-      '디즈니': 12000,
+      '나의 히어로 아카데미': 15000,
+      '원피스': 17000,
       '포켓몬': 13000,
-      '레고': 30000,
-      '건담': 32000,
       '기타': 10000,
     }[_category] ?? 10000;
 
@@ -187,40 +228,38 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
         return;
       }
 
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: true,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final selectedFiles = result.files
-          .where((file) => file.bytes != null && file.bytes!.isNotEmpty)
-          .take(remainingCount)
-          .toList();
-
-      if (selectedFiles.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('선택한 사진을 불러오지 못했어요. 다시 선택해주세요.')),
-        );
+      final source = await pickImageSourceSheet(context);
+      if (source == null) return;
+      if (source == ImageSource.camera) {
+        await _captureFromCamera();
         return;
       }
 
-      if (!mounted) return;
-      setState(() {
-        for (final file in selectedFiles) {
-          _imageBytesList.add(file.bytes!);
-          _imageNames.add(file.name);
-        }
-      });
+      // 갤러리에서 여러 장 선택 → 한 장씩 크롭해서 추가해요.
+      final picked = await ImagePicker().pickMultiImage(imageQuality: 85, maxWidth: 1600);
+      if (picked.isEmpty) return;
 
-      final overLimitCount = result.files.length - remainingCount;
+      final selected = picked.take(remainingCount).toList();
+      int added = 0;
+      for (final image in selected) {
+        final bytes = await cropPickedImage(image);
+        if (bytes == null || bytes.isEmpty) continue; // 이 사진은 크롭을 취소함
+        if (!mounted) return;
+        setState(() {
+          _imageBytesList.add(bytes);
+          _imageNames.add(image.name);
+        });
+        // 너무 작은 사진(캡처본·스티커 등)일 때만 조용히 안내해요.
+        unawaited(_warnIfLowResolution([bytes]));
+        added++;
+      }
+
+      final overLimitCount = picked.length - remainingCount;
       if (overLimitCount > 0 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '사진은 최대 10장까지 등록할 수 있어요. 선택한 ${result.files.length}장 중 ${selectedFiles.length}장만 추가했어요.',
+              '사진은 최대 10장까지 등록할 수 있어요. 선택한 ${picked.length}장 중 $added장만 추가했어요.',
             ),
             duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
@@ -233,6 +272,57 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
         const SnackBar(content: Text('사진을 불러오지 못했어요. 파일 선택 권한이나 형식을 확인해주세요.')),
       );
     }
+  }
+
+  // 카메라로 한 장 촬영해서 추가해요(갤러리는 여러 장, 카메라는 한 장씩).
+  Future<void> _captureFromCamera() async {
+    try {
+      final photo = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 85, maxWidth: 1600);
+      if (photo == null) return;
+      final bytes = await cropPickedImage(photo);
+      if (bytes == null || bytes.isEmpty) return;
+      if (!mounted) return;
+      setState(() {
+        _imageBytesList.add(bytes);
+        _imageNames.add(photo.name);
+      });
+      unawaited(_warnIfLowResolution([bytes]));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('카메라로 사진을 찍지 못했어요. 카메라 권한을 확인해주세요.')),
+      );
+    }
+  }
+
+  // 짧은 변 기준 이 픽셀 수보다 작으면 카드/썸네일에서 흐리게 보일
+  // 가능성이 커요. 캡처본·스티커·아이콘 이미지를 실수로 고른 경우를
+  // 걸러내는 정도의 느슨한 기준이라, 실제 카메라 사진은 거의 걸리지 않아요.
+  static const int _lowResolutionThreshold = 500;
+
+  Future<int?> _shortSideOf(Uint8List bytes) async {
+    try {
+      // 이 flutter 버전의 decodeImageFromList는 콜백 없이 bytes 하나만
+      // 받고 스스로 Future를 반환해요. 예전 dart:ui 콜백 방식으로 잘못
+      // 호출했던 걸 여기서 고쳤어요.
+      final image = await decodeImageFromList(bytes);
+      return image.width < image.height ? image.width : image.height;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _warnIfLowResolution(List<Uint8List> newBytesList) async {
+    final shortSides = await Future.wait(newBytesList.map(_shortSideOf));
+    final hasLowResolution = shortSides.any((side) => side != null && side < _lowResolutionThreshold);
+    if (!hasLowResolution || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('선택한 사진 중 해상도가 낮은 사진이 있어요. 카드에서는 흐리게 보일 수 있어요.'),
+        duration: Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   int get _totalImageCount => _existingImageUrls.length + _imageBytesList.length;
@@ -292,11 +382,297 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
     });
   }
 
-  void _applyAiPrice() {
+  // 태그를 쉼표/공백 기준으로 분리해요.
+  List<String> _currentTags() {
+    return _tagController.text
+        .split(RegExp(r'[,\s]+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  // 토글을 켜면 실행돼요. 입력을 검증하고, DIM 로딩을 띄운 뒤 태그·제목 기준으로
+  // 누적된 완료 거래를 검색해 추천가를 계산해요. 조건을 못 맞추면 토글을 OFF로 되돌립니다.
+  Future<void> _applyAiPrice() async {
+    final title = _titleController.text.trim();
+    final tags = _currentTags();
+
+    // 1) 태그/경매이름이 모두 비어 있으면 안내만 하고 토글 OFF로 복귀.
+    if (title.isEmpty && tags.isEmpty) {
+      setState(() => _useAiPrice = false);
+      await _showAiInfoDialog(
+        '입력이 필요해요',
+        '먼저 경매 이름(제목)이나 태그를 입력해 주세요.\n같은 종류의 실제 거래 데이터를 찾아 추천 시작가를 계산해 드려요.',
+      );
+      return;
+    }
+
+    // 2) 전체화면 DIM 로딩(덕옥션 아이콘) 표시.
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'AI 추천가 분석',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (_, __, ___) => const _AiLoadingOverlay(),
+    );
+
+    // 조회가 아주 빨라도 로딩 화면은 최소 5초는 보여줘요(분석하는 느낌 유지).
+    final minShown = Future<void>.delayed(const Duration(seconds: 5));
+    int? dataPrice;
+    int sampleCount = 0;
+    try {
+      final result = await _fetchDataBasedPrice(tags, title);
+      dataPrice = result.$1;
+      sampleCount = result.$2;
+    } catch (_) {
+      dataPrice = null;
+      sampleCount = 0;
+    } finally {
+      await minShown; // 최소 표시 시간 보장
+      if (mounted) Navigator.of(context, rootNavigator: true).pop(); // 로딩 닫기
+    }
+    if (!mounted) return;
+
+    // 3) 검색 실패 또는 조건 부족 → 무엇을 보완하면 되는지 안내 팝업 + 토글 OFF 복귀.
+    //    부족해 보이는 항목(사진 없음·제목 짧음·태그 부족)을 강조해서 알려줘요.
+    if (dataPrice == null) {
+      setState(() {
+        _useAiPrice = false;
+        _aiComputed = false;
+        _aiDataPrice = null;
+        _aiSampleCount = sampleCount;
+      });
+      final cover = _coverImagePayloadForAi();
+      final hasImage = cover.urls.isNotEmpty || cover.dataUrls.isNotEmpty;
+      await _showAiRecommendFailedDialog(
+        hasImage: hasImage,
+        titleWeak: title.replaceAll(RegExp(r'\s'), '').length < 4,
+        tagsWeak: tags.length < 2,
+      );
+      return;
+    }
+
+    // 4) 성공 → 토글 ON 유지 + 추천가를 시작가로 적용.
     setState(() {
+      _aiComputed = true;
+      _aiDataPrice = dataPrice;
+      _aiSampleCount = sampleCount;
       _useAiPrice = true;
       _startPriceController.text = _aiRecommendedPrice.toString();
     });
+  }
+
+  Future<void> _showAiInfoDialog(String title, String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: Color(0xFFE11D48), size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF16305C))),
+            ),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF475569))),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE11D48)),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 추천가 계산 실패 시, 무엇을 보완하면 되는지 체크리스트로 안내해요.
+  // 부족해 보이는 항목(사진 없음/제목 짧음/태그 부족)은 분홍색으로 강조하고,
+  // '사진 다시 올리기'로 상품이 잘 보이는 사진을 바로 추가할 수 있게 해줘요.
+  Future<void> _showAiRecommendFailedDialog({
+    required bool hasImage,
+    required bool titleWeak,
+    required bool tagsWeak,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: Color(0xFFE11D48), size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                '추천가를 계산하지 못했어요',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xFF16305C)),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '웹에서 이 상품의 시세를 찾기 어려웠어요.\n아래를 보완하면 더 정확한 추천가를 받을 수 있어요.',
+                style: TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF475569)),
+              ),
+              const SizedBox(height: 14),
+              _aiTipRow(
+                '📷',
+                '상품이 잘 보이는 사진',
+                '상품 전체가 또렷하게 나온 사진을 대표(커버)로 올려주세요. 흐리거나 일부만 보이면 인식이 어려워요.',
+                highlight: !hasImage,
+              ),
+              _aiTipRow(
+                '🏷️',
+                '정확한 상품명',
+                '캐릭터·시리즈·제품명을 구체적으로 적어주세요. (예: 치이카와 우사기 인형)',
+                highlight: titleWeak,
+              ),
+              _aiTipRow(
+                '#️⃣',
+                '해시태그 보완',
+                '캐릭터명·시리즈명·종류를 태그로 2개 이상 넣어주세요.',
+                highlight: tagsWeak,
+              ),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF64748B)),
+            child: const Text('직접 수정할게요'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE11D48)),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _pickImage();
+            },
+            icon: const Icon(Icons.add_a_photo_rounded, size: 18),
+            label: const Text('사진 다시 올리기'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 실패 안내 팝업의 항목 한 줄(이모지 + 제목 + 설명). highlight면 분홍 강조 + '보완 추천' 배지.
+  Widget _aiTipRow(String emoji, String title, String desc, {required bool highlight}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: highlight ? const Color(0xFFFFF1F5) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: highlight ? const Color(0xFFFBCFE1) : Colors.transparent),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          color: highlight ? const Color(0xFF9D174D) : const Color(0xFF334155),
+                        ),
+                      ),
+                    ),
+                    if (highlight) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE11D48),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          '보완 추천',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(desc, style: const TextStyle(fontSize: 12, height: 1.4, color: Color(0xFF64748B))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // AI 추천가 요청에 쓸 대표(커버) 이미지 하나를 준비해요.
+  // 등록 화면에서는 아직 업로드 전이라 로컬 bytes를 data URL로 인코딩하고,
+  // 수정 화면처럼 이미 업로드된 사진이 커버면 그 URL을 그대로 보내요.
+  ({List<String> urls, List<String> dataUrls}) _coverImagePayloadForAi() {
+    final total = _totalImageCount;
+    if (total == 0) return (urls: const [], dataUrls: const []);
+    final existingCount = _existingImageUrls.length;
+    final coverIndex = _coverImageIndex.clamp(0, total - 1);
+    if (coverIndex < existingCount) {
+      final url = _existingImageUrls[coverIndex];
+      return (urls: url.isNotEmpty ? [url] : const [], dataUrls: const []);
+    }
+    final localIndex = coverIndex - existingCount;
+    if (localIndex >= 0 && localIndex < _imageBytesList.length) {
+      final bytes = _imageBytesList[localIndex];
+      // 너무 큰 이미지는 콜러블 페이로드가 커지니 건너뛰어요(텍스트만으로 추천).
+      if (bytes.isNotEmpty && bytes.lengthInBytes <= 3 * 1024 * 1024) {
+        return (urls: const [], dataUrls: ['data:image/jpeg;base64,${base64Encode(bytes)}']);
+      }
+    }
+    return (urls: const [], dataUrls: const []);
+  }
+
+  // 서버(recommendPrice)에 제목·태그·카테고리·상태·대표 이미지를 보내,
+  // '내부 거래 데이터 + 네이버 쇼핑 + OpenAI 웹검색'을 종합한 추천가를 받아와요.
+  // 블렌딩(내부 우선 + 웹 보조)은 서버에서 처리해요. 값을 못 내면 (null, 표본수)를
+  // 반환해 규칙 기반 폴백(_aiRecommendedPrice)으로 넘겨요.
+  Future<(int?, int)> _fetchDataBasedPrice(List<String> tags, String title) async {
+    if (title.isEmpty && tags.isEmpty) return (null, 0);
+    try {
+      final img = _coverImagePayloadForAi();
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('recommendPrice')
+          .call<Map<String, dynamic>>({
+        'title': title,
+        'tags': tags,
+        'category': _category,
+        'condition': _condition,
+        if (img.urls.isNotEmpty) 'imageUrls': img.urls,
+        if (img.dataUrls.isNotEmpty) 'imageDataUrls': img.dataUrls,
+      });
+      final data = res.data;
+      final success = data['success'] == true;
+      final price = (data['price'] as num?)?.toInt() ?? 0;
+      final sampleCount = (data['sampleCount'] as num?)?.toInt() ?? 0;
+      if (success && price > 0) return (price, sampleCount);
+      return (null, sampleCount);
+    } catch (_) {
+      // 네트워크/서버 오류 → 규칙 기반 폴백으로.
+      return (null, 0);
+    }
   }
 
   void _switchToDirectStartPriceInput() {
@@ -347,7 +723,7 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF334155),
+                backgroundColor: const Color(0xFF16305C),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -365,6 +741,13 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
     if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
 
+    if (_totalImageCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('상품 사진을 최소 1장 등록해주세요.')),
+      );
+      return;
+    }
+
     if (_auctionType == '최저가 경매' && !_lowestAuctionAgreement) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('최저가 경매 조건에 동의해주세요.')),
@@ -376,6 +759,51 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
     if (startPrice <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('시작가 또는 최소 희망가를 입력해주세요.')),
+      );
+      return;
+    }
+    if (startPrice < 1000) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('시작가는 최소 1,000원부터 등록할 수 있어요.')),
+        );
+      return;
+    }
+    if (startPrice % 1000 != 0) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('시작가는 1,000원 단위로 입력해주세요. (예: 1,000 / 2,000 / 5,000)')),
+        );
+      return;
+    }
+
+    // 무료배송이면 0, 반값/일반택배는 각 범위 내 입력값이어야 해요.
+    final shippingFee = _shippingOption == _shipFree ? 0 : _parseNumber(_shippingFeeController.text);
+    if (_shippingOption != _shipFree) {
+      final range = _shippingRanges[_shippingOption]!;
+      if (shippingFee < range.$1 || shippingFee > range.$2) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(content: Text('$_shippingOption 배송비는 ${_shipRangeHint(_shippingOption)} 사이로 입력해주세요.')),
+          );
+        return;
+      }
+      if (shippingFee % 100 != 0) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(content: Text('배송비는 100원 단위로 입력해주세요.')),
+          );
+        return;
+      }
+    }
+
+    if (_category == AppCategories.kuji && !AppCategories.kujiGrades.contains(_kujiGrade)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('쿠지 등급(상위상/하위상)을 선택해주세요.')),
       );
       return;
     }
@@ -407,6 +835,8 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim(),
       category: _category,
+      kujiGrade: _category == AppCategories.kuji ? _kujiGrade : null,
+      itemType: _itemType,
       tags: _tagController.text
           .split(',')
           .map((tag) => tag.trim())
@@ -425,14 +855,24 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
       sellerId: _isEditMode ? (edit?.sellerId ?? user?.uid) : user?.uid,
       sellerName: user?.displayName?.trim().isNotEmpty == true ? user!.displayName! : '나의 덕샵',
       sellerSalesCount: edit?.sellerSalesCount ?? 0,
+      // 신규 등록이면 저장 단계(_saveAuctionToFirestore)에서 프로필 배지와
+      // 첫 등록 여부를 새로 계산해서 채워요. 수정(edit)일 때는 등록 당시
+      // 값을 그대로 들고 가야 배지가 사라지거나 NEW가 없어지지 않아요.
+      sellerBadgeIds: edit?.sellerBadgeIds ?? const [],
+      isSellerFirstListing: edit?.isSellerFirstListing ?? false,
       auctionType: _auctionType == '최저가 경매' ? 'lowest' : 'normal',
       startPrice: startPrice,
       currentPrice: startPrice,
       hopePrice: _parseNumber(_hopePriceController.text),
-      buyNowPrice: _parseNumber(_buyNowPriceController.text),
+      buyNowPrice: 0,
       bidUnit: _finalBidUnit,
-      shippingFee: _parseNumber(_shippingFeeController.text),
+      shippingFee: shippingFee,
       aiRecommendedPrice: _aiRecommendedPrice,
+      // 수수료 면제 여부는 최초 등록 시점에 확정돼요. 수정(edit)일 때는 그때의
+      // 값을 그대로 이어가고, 신규 등록이면 저장 단계에서 이벤트 설정 기준으로
+      // 다시 스탬프해요.
+      feeExempt: edit?.feeExempt ?? false,
+      feeRatePercent: edit?.feeRatePercent ?? 0,
       status: 'active',
       createdAt: _isEditMode ? (edit?.createdAt ?? DuckAuctionStore.devNow()) : DuckAuctionStore.devNow(),
       endAt: DuckAuctionStore.devNow().add(_periodDuration(_period)),
@@ -453,9 +893,14 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
       return;
     }
 
+    // result.error에 StateError로 담긴 구체적인 사유(이메일/휴대폰 인증
+    // 필요, 배송지 미등록 등)가 있으면 그대로 보여주고, 없으면 일반적인
+    // 실패 문구를 보여줍니다. (예전에는 항상 일반 문구만 떴어서 사용자가
+    // 왜 실패했는지 알 수 없었어요.)
+    final specificMessage = result.error is StateError ? (result.error as StateError).message : null;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('경매 저장에 실패했습니다.\n잠시 후 다시 시도해주세요.'),
+      SnackBar(
+        content: Text(specificMessage ?? '경매 저장에 실패했습니다.\n잠시 후 다시 시도해주세요.'),
       ),
     );
   }
@@ -563,15 +1008,21 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
       _titleController.clear();
       _descriptionController.clear();
       _tagController.clear();
-      _shippingFeeController.text = '3000';
+      _shippingFeeController.text = '1900';
+      _shippingOption = _shipHalf;
+      _aiComputed = false;
+      _aiDataPrice = null;
+      _aiSampleCount = 0;
+      _useAiPrice = false;
       _hopePriceController.clear();
       _startPriceController.clear();
-      _buyNowPriceController.clear();
       _existingImageUrls.clear();
       _imageBytesList.clear();
       _imageNames.clear();
       _coverImageIndex = 0;
       _category = '치이카와';
+      _kujiGrade = AppCategories.kujiGradeUpper;
+      _itemType = AppCategories.itemTypeEtc;
       _condition = '미개봉';
       _auctionType = '일반 경매';
       _period = '24시간';
@@ -581,26 +1032,7 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
     });
   }
 
-  String _categoryEmoji(String category) {
-    switch (category) {
-      case '산리오':
-        return '🎀';
-      case '진격의 거인':
-        return '⚔️';
-      case '디즈니':
-        return '🐭';
-      case '포켓몬':
-        return '⚡';
-      case '레고':
-        return '🧱';
-      case '건담':
-        return '🤖';
-      case '치이카와':
-        return '⭐';
-      default:
-        return '🎁';
-    }
-  }
+  String _categoryEmoji(String category) => AppCategories.emojiFor(category);
 
   @override
   Widget build(BuildContext context) {
@@ -617,16 +1049,26 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
         actions: [
           TextButton(
             onPressed: _isSubmitting ? null : _submit,
-            child: Text(_isSubmitting ? (_isEditMode ? '수정 중...' : '등록 중...') : (_isEditMode ? '수정' : '등록'), style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF334155))),
+            child: Text(_isSubmitting ? (_isEditMode ? '수정 중...' : '등록 중...') : (_isEditMode ? '수정' : '등록'), style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF16305C))),
           ),
         ],
       ),
       body: SafeArea(
-        child: Form(
+        child: Column(
+          children: [
+            Expanded(
+              child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 6, 18, 110),
+            padding: EdgeInsets.zero,
             children: [
+              ResponsiveContentBounds(
+                maxWidth: context.responsive(phone: double.infinity, tablet: 640.0),
+                padding: EdgeInsets.fromLTRB(context.pagePadding, 6, context.pagePadding, 110),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+              if (!_isEditMode) const _FeeEventBanner(),
               _PhotoPickerBox(
                 existingImageUrls: List<String>.from(_existingImageUrls),
                 existingPreviewBytesList: List<Uint8List>.from(_existingPreviewBytesList),
@@ -667,7 +1109,35 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                     label: '카테고리',
                     value: _category,
                     items: _categories,
-                    onChanged: (value) => setState(() => _category = value),
+                    onChanged: (value) => setState(() {
+                      _category = value;
+                      // 카테고리를 바꿨을 때 현재 세부 카테고리가 새 목록에 없으면
+                      // (예: 포켓몬에서 '카드'를 고른 뒤 다른 카테고리로 이동)
+                      // 기본값(기타)으로 되돌려 드롭다운 값 꼬임을 막아요.
+                      if (!AppCategories.itemTypesForCategory(_category).contains(_itemType)) {
+                        _itemType = AppCategories.itemTypeEtc;
+                      }
+                      // 카테고리가 바뀌면 이전 카테고리 기준 추천가는 무효화해요.
+                      _aiComputed = false;
+                      _aiDataPrice = null;
+                      _aiSampleCount = 0;
+                      _useAiPrice = false;
+                    }),
+                  ),
+                  if (_category == AppCategories.kuji)
+                    _RegisterSelectTile(
+                      label: '쿠지 등급',
+                      value: _kujiGrade,
+                      items: AppCategories.kujiGrades,
+                      itemDescriptions: AppCategories.kujiGradeDescriptions,
+                      sheetNote: AppCategories.kujiGradeNote,
+                      onChanged: (value) => setState(() => _kujiGrade = value),
+                    ),
+                  _RegisterSelectTile(
+                    label: '세부 카테고리',
+                    value: _itemType,
+                    items: AppCategories.itemTypesForCategory(_category),
+                    onChanged: (value) => setState(() => _itemType = value),
                   ),
                   _RegisterSelectTile(
                     label: '상품 상태',
@@ -675,12 +1145,32 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                     items: _conditions,
                     onChanged: (value) => setState(() => _condition = value),
                   ),
-                  _UnderlineTextField(
-                    controller: _shippingFeeController,
-                    label: '배송비',
-                    hint: '예: 3000 / 반택 기능은 추후 연결',
-                    keyboardType: TextInputType.number,
+                  _RegisterSelectTile(
+                    label: '배송 방식',
+                    value: _shippingOption,
+                    items: _shippingOptions,
+                    onChanged: (value) => setState(() {
+                      _shippingOption = value;
+                      if (value == _shipFree) {
+                        _shippingFeeController.text = '0';
+                      } else {
+                        final range = _shippingRanges[value]!;
+                        final cur = _parseNumber(_shippingFeeController.text);
+                        // 범위를 벗어난 값이면 기본값으로 맞춰줘요.
+                        if (cur < range.$1 || cur > range.$2) {
+                          _shippingFeeController.text = _shippingDefaults[value].toString();
+                        }
+                      }
+                    }),
                   ),
+                  if (_shippingOption != _shipFree)
+                    _UnderlineTextField(
+                      controller: _shippingFeeController,
+                      label: '$_shippingOption 배송비',
+                      hint: _shipRangeHint(_shippingOption),
+                      keyboardType: TextInputType.number,
+                      helperText: '${_shipRangeHint(_shippingOption)} 사이로 입력해주세요.',
+                    ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -712,19 +1202,23 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                         : _NormalAuctionFields(
                             searchQuery: _titleController.text,
                             aiPrice: _aiRecommendedPrice,
+                            aiComputed: _aiComputed,
+                            aiSampleCount: _aiSampleCount,
+                            aiDataBased: _aiDataPrice != null,
                             useAiPrice: _useAiPrice,
-                            onUseAiPriceChanged: (value) => setState(() {
-                              _useAiPrice = value;
+                            onUseAiPriceChanged: (value) {
                               if (value) {
-                                _startPriceController.text = _aiRecommendedPrice.toString();
+                                // 토글 ON → 검증·검색 후 성공 시에만 ON 유지.
+                                _applyAiPrice();
+                              } else {
+                                setState(() => _useAiPrice = false);
                               }
-                            }),
+                            },
                             onApplyAiPrice: _applyAiPrice,
                             onDirectInput: _switchToDirectStartPriceInput,
                             hopePriceController: _hopePriceController,
                             startPriceController: _startPriceController,
                             startPriceFocusNode: _startPriceFocusNode,
-                            buyNowPriceController: _buyNowPriceController,
                             bidUnit: _bidUnit,
                             bidUnits: _bidUnits,
                             onBidUnitChanged: (value) => setState(() => _bidUnit = value),
@@ -748,30 +1242,37 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                 const SizedBox(height: 14),
                 const _RegisterPolicyNotice(),
               ],
+                  ],
+                ),
+              ),
             ],
           ),
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
-          ),
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF334155),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 54),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
-            onPressed: _isSubmitting ? null : _submit,
-            child: Text(
-              _isSubmitting ? (_isEditMode ? '수정 중...' : '등록 중...') : _isEditMode ? '수정 완료하기' : isLowestAuction ? '최저가 경매 등록하기' : '일반 경매 등록하기',
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
+              ),
+              child: ResponsiveContentBounds(
+                maxWidth: context.responsive(phone: double.infinity, tablet: 640.0),
+                padding: EdgeInsets.fromLTRB(context.pagePadding, 12, context.pagePadding, 16),
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF16305C),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 54),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _isSubmitting ? null : _submit,
+                  child: Text(
+                    _isSubmitting ? (_isEditMode ? '수정 중...' : '등록 중...') : _isEditMode ? '수정 완료하기' : isLowestAuction ? '최저가 경매 등록하기' : '일반 경매 등록하기',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -830,7 +1331,7 @@ class _PhotoPickerBoxState extends State<_PhotoPickerBox> {
 
   Widget _brokenPreview({required int displayIndex}) {
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: const Color(0xFFF4F7FC),
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(
@@ -897,6 +1398,7 @@ class _PhotoPickerBoxState extends State<_PhotoPickerBox> {
               '상품 이미지',
               style: AppTextStyles.sectionTitle.copyWith(fontSize: 16),
             ),
+            const Text(' *', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900, fontSize: 16)),
             const SizedBox(width: 6),
             Text(
               '$_totalCount/10',
@@ -932,7 +1434,7 @@ class _PhotoPickerBoxState extends State<_PhotoPickerBox> {
                           width: 104,
                           height: 104,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
+                            color: const Color(0xFFF4F7FC),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: const Color(0xFFCBD5E1)),
                           ),
@@ -965,10 +1467,7 @@ class _PhotoPickerBoxState extends State<_PhotoPickerBox> {
                             decoration: BoxDecoration(
                               color: const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isCover ? kAiAccent : const Color(0xFFE2E8F0),
-                                width: isCover ? 2 : 1,
-                              ),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: isExisting
@@ -1013,7 +1512,7 @@ class _PhotoPickerBoxState extends State<_PhotoPickerBox> {
                                 ),
                                 child: const Text(
                                   '대표 설정',
-                                  style: TextStyle(color: Color(0xFF334155), fontSize: 10, fontWeight: FontWeight.w900),
+                                  style: TextStyle(color: Color(0xFF16305C), fontSize: 10, fontWeight: FontWeight.w900),
                                 ),
                               ),
                             ),
@@ -1069,7 +1568,7 @@ class _PhotoPickerBoxState extends State<_PhotoPickerBox> {
                         border: Border.all(color: const Color(0xFFE2E8F0)),
                         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4))],
                       ),
-                      child: const Icon(Icons.chevron_right, size: 20, color: Color(0xFF334155)),
+                      child: const Icon(Icons.chevron_right, size: 20, color: Color(0xFF16305C)),
                     ),
                   ),
                 ),
@@ -1153,12 +1652,12 @@ class _UnderlineTextField extends StatelessWidget {
         hintText: hint,
         helperText: helperText,
         alignLabelWithHint: maxLines > 1,
-        floatingLabelStyle: const TextStyle(color: Color(0xFF334155), fontWeight: FontWeight.w800),
+        floatingLabelStyle: const TextStyle(color: Color(0xFF16305C), fontWeight: FontWeight.w800),
         disabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE4E4E4))),
         contentPadding: const EdgeInsets.symmetric(vertical: 16),
         border: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE4E4E4))),
         enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFE4E4E4))),
-        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF334155), width: 1.4)),
+        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF16305C), width: 1.4)),
       ),
     );
   }
@@ -1169,12 +1668,18 @@ class _RegisterSelectTile extends StatelessWidget {
   final String value;
   final List<String> items;
   final ValueChanged<String> onChanged;
+  // 선택지 옆에 작은 설명을 붙이고 싶을 때만 넣어요(예: 쿠지 등급 설명).
+  final Map<String, String>? itemDescriptions;
+  // 목록 전체에 대한 안내 문구가 필요할 때만 넣어요(예: 등급 기준 안내).
+  final String? sheetNote;
 
   const _RegisterSelectTile({
     required this.label,
     required this.value,
     required this.items,
     required this.onChanged,
+    this.itemDescriptions,
+    this.sheetNote,
   });
 
   @override
@@ -1194,29 +1699,71 @@ class _RegisterSelectTile extends StatelessWidget {
         onTap: () async {
           final selected = await showModalBottomSheet<String>(
             context: context,
+            isScrollControlled: true,
             backgroundColor: Colors.white,
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
             builder: (context) => SafeArea(
-              child: Padding(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.72),
+                child: SingleChildScrollView(
+                  child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 10),
-                    ...items.map(
-                      (item) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(item, style: const TextStyle(fontWeight: FontWeight.w800)),
-                        trailing: item == value ? const Icon(Icons.check, color: Color(0xFF334155)) : null,
-                        onTap: () => Navigator.of(context).pop(item),
+                    if (sheetNote != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        sheetNote!,
+                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
                       ),
-                    ),
+                    ],
+                    const SizedBox(height: 10),
+                    ...items.map((item) {
+                      final description = itemDescriptions?[item];
+                      final isSelected = item == value;
+                      // 체크 아이콘만으로는 선택된 항목이 눈에 잘 안 들어와서,
+                      // 진한 배경 대신 아주 옅은 톤 배경 + 글자색만 살짝
+                      // 강조하는 정도로 넣었어요. 이 정도면 목록이 번잡해
+                      // 보이지 않으면서도 선택 상태가 분명해져요.
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF16305C).withOpacity(0.06) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          title: Text(
+                            item,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: isSelected ? const Color(0xFF16305C) : const Color(0xFF111827),
+                            ),
+                          ),
+                          subtitle: description == null
+                              ? null
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    description,
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                          trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF16305C)) : null,
+                          onTap: () => Navigator.of(context).pop(item),
+                        ),
+                      );
+                    }),
                   ],
                 ),
+              ),
+              ),
               ),
             ),
           );
@@ -1264,7 +1811,7 @@ class _SegmentSelector extends StatelessWidget {
                   value,
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: selected ? const Color(0xFF334155) : const Color(0xFF777777),
+                    color: selected ? const Color(0xFF16305C) : const Color(0xFF777777),
                   ),
                 ),
               ),
@@ -1279,6 +1826,9 @@ class _SegmentSelector extends StatelessWidget {
 class _NormalAuctionFields extends StatelessWidget {
   final String searchQuery;
   final int aiPrice;
+  final bool aiComputed;
+  final int aiSampleCount;
+  final bool aiDataBased;
   final bool useAiPrice;
   final ValueChanged<bool> onUseAiPriceChanged;
   final VoidCallback onApplyAiPrice;
@@ -1286,7 +1836,6 @@ class _NormalAuctionFields extends StatelessWidget {
   final TextEditingController hopePriceController;
   final TextEditingController startPriceController;
   final FocusNode startPriceFocusNode;
-  final TextEditingController buyNowPriceController;
   final String bidUnit;
   final List<String> bidUnits;
   final ValueChanged<String> onBidUnitChanged;
@@ -1295,6 +1844,9 @@ class _NormalAuctionFields extends StatelessWidget {
   const _NormalAuctionFields({
     required this.searchQuery,
     required this.aiPrice,
+    required this.aiComputed,
+    required this.aiSampleCount,
+    required this.aiDataBased,
     required this.useAiPrice,
     required this.onUseAiPriceChanged,
     required this.onApplyAiPrice,
@@ -1302,7 +1854,6 @@ class _NormalAuctionFields extends StatelessWidget {
     required this.hopePriceController,
     required this.startPriceController,
     required this.startPriceFocusNode,
-    required this.buyNowPriceController,
     required this.bidUnit,
     required this.bidUnits,
     required this.onBidUnitChanged,
@@ -1329,7 +1880,7 @@ class _NormalAuctionFields extends StatelessWidget {
     final uri = Uri.https('search.naver.com', '/search.naver', {'query': keyword});
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('네이버 검색을 열지 못했어요.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('시세 검색 페이지를 열지 못했어요.')));
     }
   }
 
@@ -1353,15 +1904,53 @@ class _NormalAuctionFields extends StatelessWidget {
                 const Icon(Icons.auto_awesome, color: Color(0xFFE11D48), size: 18),
                 const SizedBox(width: 6),
                 Text('AI 추천가', style: AppTextStyles.aiTitle),
+                const Spacer(),
+                Switch(
+                  value: useAiPrice,
+                  activeColor: const Color(0xFFE11D48),
+                  onChanged: onUseAiPriceChanged,
+                ),
               ]),
+              const SizedBox(height: 4),
+              if (useAiPrice && aiComputed) ...[
+                Text(
+                  '웹 시세와 실제 거래 $aiSampleCount건을 종합해 분석한 추천 시작가예요.',
+                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF777777), height: 1.4),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatWonFromInt(aiPrice),
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFFE11D48)),
+                ),
+                const SizedBox(height: 6),
+                const Row(
+                  children: [
+                    Icon(Icons.check_circle_rounded, size: 15, color: Color(0xFFE11D48)),
+                    SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '이 가격이 시작가로 적용됐어요.',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+                      ),
+                    ),
+                  ],
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: onApplyAiPrice,
+                    style: TextButton.styleFrom(foregroundColor: const Color(0xFFE11D48), padding: EdgeInsets.zero),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('다시 분석', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ] else ...[
+                const Text(
+                  '토글을 켜면 사진·제목·태그로 웹 전체 시세와 실제 거래 데이터를 함께 분석해 추천 시작가를 계산해 드려요.',
+                  style: TextStyle(fontSize: 12.5, color: Color(0xFF777777), height: 1.45),
+                ),
+              ],
               const SizedBox(height: 8),
-              const Text('아직 AI 추천가가 없어요', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFE11D48))),
-              const SizedBox(height: 5),
-              const Text(
-                '유사 상품의 거래 데이터가 충분하지 않아 현재는 예상 가격을 안내하기 어려워요. 직접 시작가를 입력하거나 네이버에서 시세를 확인해주세요.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF777777), height: 1.45),
-              ),
-              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -1373,7 +1962,7 @@ class _NormalAuctionFields extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                   ),
                   icon: const Icon(Icons.search_rounded),
-                  label: Text('네이버에서 시세 찾기', style: AppTextStyles.bannerButton),
+                  label: Text('다른 사이트에서 시세 찾기', style: AppTextStyles.bannerButton),
                 ),
               ),
             ],
@@ -1401,12 +1990,6 @@ class _NormalAuctionFields extends StatelessWidget {
             return number <= 0 ? '시작가를 입력해주세요.' : null;
           },
         ),
-        _UnderlineTextField(
-          controller: buyNowPriceController,
-          label: '즉시 구매가선택',
-          hint: '비워두어도 돼요',
-          keyboardType: TextInputType.number,
-        ),
         _RegisterSelectTile(
           label: '입찰 단위',
           value: bidUnit,
@@ -1414,6 +1997,108 @@ class _NormalAuctionFields extends StatelessWidget {
           onChanged: onBidUnitChanged,
         ),
       ],
+    );
+  }
+}
+
+// AI 추천가 분석 중 전체화면에 띄우는 라이트그레이 DIM + 덕옥션 마스코트 로딩 오버레이.
+/// 출시 이벤트 기간에 등록 화면 맨 위에 뜨는 "수수료 무료" 안내 배지예요.
+/// 이벤트가 켜져 있고 지금이 무료 창 안일 때만 보여요.
+class _FeeEventBanner extends StatelessWidget {
+  const _FeeEventBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<EventFeeConfig>(
+      valueListenable: DuckAuctionStore.eventFeeConfig,
+      builder: (context, config, _) {
+        if (!config.isActiveNow(DuckAuctionStore.devNow())) {
+          return const SizedBox.shrink();
+        }
+        final end = config.freeWindowEnd;
+        final endLabel = end == null
+            ? ''
+            : ' (${end.month}월 ${end.day}일 등록분까지)';
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFFE1EC), Color(0xFFFFF3D6)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF6C6D8)),
+          ),
+          child: Row(
+            children: [
+              const Text('🏴‍☠️', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '지금 등록하면 덕옥션 수수료 무료!',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        color: Color(0xFF9D174D),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '정식 출시 이벤트 기간에 등록한 경매는 판매 수수료가 없어요$endLabel.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: Color(0xFF9A5B27),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AiLoadingOverlay extends StatelessWidget {
+  const _AiLoadingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        // 약간 회색의 반투명 딤 — 뒤 화면이 은은하게 비쳐요.
+        color: const Color(0xF0EDEEF0),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Image.asset(
+                // 마스코트 + 로고 + "잠시만 기다려주세요!"가 합쳐진 전용 로딩 아이콘.
+                'assets/image/image/ai_loading.png',
+                width: 300,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const SizedBox(
+              width: 34,
+              height: 34,
+              child: CircularProgressIndicator(strokeWidth: 3.2, color: Color(0xFFE11D48)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1468,7 +2153,7 @@ class _CheckLine extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, size: 17, color: Color(0xFF334155)),
+          const Icon(Icons.check_circle, size: 17, color: Color(0xFF16305C)),
           const SizedBox(width: 7),
           Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],

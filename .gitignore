@@ -1,45 +1,78 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# ===== 덕옥션 .gitignore =====
+# 목적: 서명키·서비스계정·API키·Firebase 설정 등 민감 파일과 빌드 산출물이
+# 실수로 git에 올라가지 않게 막아요. (git push 전 반드시 적용)
 
-# IntelliJ related
+# ---- 절대 커밋 금지: 서명키 / 시크릿 ----
+# Android 업로드/릴리즈 키스토어 — 유출 시 재발급 불가(플레이 재등록 필요)
+*.jks
+*.keystore
+android/key.properties
+android/**/keystore.properties
+
+# Firebase / GCP 설정·서비스계정
+**/google-services.json
+**/GoogleService-Info.plist
+**/serviceAccountKey*.json
+**/*service-account*.json
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+# Cloud Functions 로컬 시크릿(런타임은 Secret Manager 사용)
+functions/.env
+functions/.env.*
+functions/.secret.local
+
+# 환경변수 파일
+.env
+.env.*
+*.local
+
+# FlutterFire 자동생성 설정(프로젝트 식별자 포함) — 필요 시 커밋하되 팀 정책에 맞춰 결정
+# 주석 해제하면 제외됩니다:
+# lib/firebase_options.dart
+
+# ---- Flutter / Dart 빌드 산출물 ----
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock  # 앱(비패키지) 프로젝트에서는 팀 정책에 따라 커밋 여부 결정
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
 *.iml
 *.ipr
 *.iws
-.idea/
+.DS_Store
+Thumbs.db
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# ---- Android ----
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+android/.kotlin/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
+# ---- iOS ----
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/ephemeral/
+**/*.xcworkspace/xcuserdata/
+**/xcuserdata/
 
-# Symbolication related
-app.*.symbols
+# ---- Cloud Functions ----
+functions/node_modules/
+node_modules/
+npm-debug.log*
 
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# ---- 기타 ----
+*.log
+coverage/

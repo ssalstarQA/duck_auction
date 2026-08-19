@@ -52,28 +52,34 @@ class _QuickMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       hoverColor: Colors.transparent,
       focusColor: Colors.transparent,
       highlightColor: Colors.transparent,
       splashFactory: NoSplash.splashFactory,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Column(
           children: [
             SizedBox(
-              width: 46,
-              height: 46,
+              width: 36,
+              height: 36,
               child: Center(
-                child: Icon(icon, color: accentColor, size: 30),
+                child: Icon(icon, color: accentColor, size: 23),
               ),
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 4),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: AppTextStyles.category.copyWith(fontSize: 12.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.category.copyWith(
+                fontFamily: null,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -158,8 +164,9 @@ class ProductCollectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 찜 목록은 카테고리 필터 + '종료 삭제'(끝난 찜 정리)를 갖춘 전용 화면을 써요.
     if (mode == ProductCollectionMode.favorites) {
-      unawaited(DuckAuctionStore.loadFavoriteProductIds());
+      return const FavoritesCollectionScreen();
     }
 
     return Scaffold(
@@ -233,6 +240,19 @@ class AllMenuScreen extends StatefulWidget {
 
 class _AllMenuScreenState extends State<AllMenuScreen> {
   static const _favoriteMenuKey = 'duck_auction_favorite_menus_v1';
+
+  static const Map<_AllMenuCategory, Color> _categoryColors = {
+    _AllMenuCategory.all: kDuckPrimary,
+    _AllMenuCategory.favorites: kGoldAccent,
+    _AllMenuCategory.categories: Color(0xFF3B82F6),
+    _AllMenuCategory.auctions: kAiAccent,
+    _AllMenuCategory.activity: Color(0xFF6366F1),
+    _AllMenuCategory.communication: Color(0xFF10B981),
+    _AllMenuCategory.support: Color(0xFF8B5CF6),
+    _AllMenuCategory.settings: Color(0xFF64748B),
+  };
+
+  Color _colorOf(_AllMenuCategory category) => _categoryColors[category]!;
 
   _AllMenuCategory _selected = _AllMenuCategory.all;
   Set<String> _favoriteMenus = <String>{};
@@ -316,18 +336,18 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
   }
 
   List<_AllMenuEntry> get _allItems => [
-        _AllMenuEntry('section:categories', Icons.category_rounded, '전체 카테고리', '캐릭터와 브랜드별 경매를 둘러보세요.', () => setState(() => _selected = _AllMenuCategory.categories)),
-        _AllMenuEntry('section:auctions', Icons.gavel_rounded, '경매', '인기·신규·마감 임박 경매를 확인하세요.', () => setState(() => _selected = _AllMenuCategory.auctions)),
-        _AllMenuEntry('section:activity', Icons.manage_accounts_rounded, '나의 활동', '내 경매와 후기, 최근 활동을 모아보세요.', () => setState(() => _selected = _AllMenuCategory.activity)),
-        _AllMenuEntry('section:communication', Icons.forum_rounded, '소통', '채팅방과 거래 후기를 확인하세요.', () => setState(() => _selected = _AllMenuCategory.communication)),
-        _AllMenuEntry('section:support', Icons.support_agent_rounded, '고객 지원', '문의, 신고 이력, 공지사항을 확인하세요.', () => setState(() => _selected = _AllMenuCategory.support)),
-        _AllMenuEntry('section:settings', Icons.settings_rounded, '설정', '알림과 앱 정보를 관리하세요.', () => setState(() => _selected = _AllMenuCategory.settings)),
+        _AllMenuEntry('section:categories', Icons.category_rounded, '전체 카테고리', '캐릭터와 브랜드별 경매를 둘러보세요.', _colorOf(_AllMenuCategory.categories), () => setState(() => _selected = _AllMenuCategory.categories)),
+        _AllMenuEntry('section:auctions', Icons.gavel_rounded, '경매', '인기·신규·마감 임박 경매를 확인하세요.', _colorOf(_AllMenuCategory.auctions), () => setState(() => _selected = _AllMenuCategory.auctions)),
+        _AllMenuEntry('section:activity', Icons.manage_accounts_rounded, '나의 활동', '내 경매와 후기, 최근 활동을 모아보세요.', _colorOf(_AllMenuCategory.activity), () => setState(() => _selected = _AllMenuCategory.activity)),
+        _AllMenuEntry('section:communication', Icons.forum_rounded, '소통', '채팅방과 거래 후기를 확인하세요.', _colorOf(_AllMenuCategory.communication), () => setState(() => _selected = _AllMenuCategory.communication)),
+        _AllMenuEntry('section:support', Icons.support_agent_rounded, '고객 지원', '문의, 신고 이력, 공지사항을 확인하세요.', _colorOf(_AllMenuCategory.support), () => setState(() => _selected = _AllMenuCategory.support)),
+        _AllMenuEntry('section:settings', Icons.settings_rounded, '설정', '알림과 앱 정보를 관리하세요.', _colorOf(_AllMenuCategory.settings), () => setState(() => _selected = _AllMenuCategory.settings)),
       ];
 
   List<_AllMenuEntry> get _auctionItems => [
-        _AllMenuEntry('auction:popular', Icons.emoji_events_rounded, '인기 경매', '입찰과 관심이 많은 경매를 모아봤어요.', () => _push(const ProductCollectionScreen(mode: ProductCollectionMode.popular))),
-        _AllMenuEntry('auction:newest', Icons.new_releases_rounded, '신규 등록 경매', '최근 새롭게 등록된 진행 중 경매예요.', () => _push(const ProductCollectionScreen(mode: ProductCollectionMode.newest))),
-        _AllMenuEntry('auction:ending', Icons.bolt_rounded, '마감 임박 경매', '곧 마감되는 경매를 놓치지 마세요.', () => _push(const EndingSoonAuctionsScreen())),
+        _AllMenuEntry('auction:popular', Icons.emoji_events_rounded, '인기 경매', '입찰과 관심이 많은 경매를 모아봤어요.', _colorOf(_AllMenuCategory.auctions), () => _push(const ProductCollectionScreen(mode: ProductCollectionMode.popular))),
+        _AllMenuEntry('auction:newest', Icons.new_releases_rounded, '신규 등록 경매', '최근 새롭게 등록된 진행 중 경매예요.', _colorOf(_AllMenuCategory.auctions), () => _push(const ProductCollectionScreen(mode: ProductCollectionMode.newest))),
+        _AllMenuEntry('auction:ending', Icons.bolt_rounded, '마감 임박 경매', '곧 마감되는 경매를 놓치지 마세요.', _colorOf(_AllMenuCategory.auctions), () => _push(const EndingSoonAuctionsScreen())),
       ];
 
   List<_AllMenuEntry> get _detailItems {
@@ -340,73 +360,84 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
       case _AllMenuCategory.auctions:
         return _auctionItems;
       case _AllMenuCategory.activity:
+        final color = _colorOf(_AllMenuCategory.activity);
         return [
-          _AllMenuEntry('activity:reviews', Icons.rate_review_outlined, '내가 남긴 후기', '작성한 후기와 받은 후기를 확인하세요.', () => _requireLogin(
+          _AllMenuEntry('activity:reviews', Icons.rate_review_outlined, '내가 남긴 후기', '작성한 후기와 받은 후기를 확인하세요.', color, () => _requireLogin(
                 title: '후기는 로그인 후 이용할 수 있어요',
                 action: () => _push(const MyReviewsScreen()),
               )),
-          _AllMenuEntry('activity:auctions', Icons.gavel_rounded, '내 경매 관리', '판매·입찰·낙찰·유찰 경매를 관리하세요.', () => _requireLogin(
+          _AllMenuEntry('activity:auctions', Icons.gavel_rounded, '내 경매 관리', '판매·입찰·낙찰·유찰 경매를 관리하세요.', color, () => _requireLogin(
                 title: '내 경매 관리는 로그인 후 이용할 수 있어요',
                 action: () => _push(const MyAuctionManageScreen()),
               )),
-          _AllMenuEntry('activity:liked', Icons.favorite_rounded, '찜한 경매', '관심 표시한 경매를 다시 확인하세요.', () => _requireLogin(
+          _AllMenuEntry('activity:liked', Icons.favorite_rounded, '찜한 경매', '관심 표시한 경매를 다시 확인하세요.', color, () => _requireLogin(
                 title: '찜한 경매는 로그인 후 볼 수 있어요',
                 action: () => _push(const ProductCollectionScreen(mode: ProductCollectionMode.favorites)),
               )),
-          _AllMenuEntry('activity:recent', Icons.history_rounded, '최근 본 경매', '최근 확인한 경매를 이어서 둘러보세요.', () => _push(const RecentViewedProductsScreen())),
+          _AllMenuEntry('activity:recent', Icons.history_rounded, '최근 본 경매', '최근 확인한 경매를 이어서 둘러보세요.', color, () => _push(const RecentViewedProductsScreen())),
         ];
       case _AllMenuCategory.communication:
+        final color = _colorOf(_AllMenuCategory.communication);
         return [
-          _AllMenuEntry('communication:chat', Icons.chat_bubble_rounded, '채팅방 목록', '판매자와 구매자 간 대화를 확인하세요.', () => _requireLogin(
+          _AllMenuEntry('communication:chat', Icons.chat_bubble_rounded, '채팅방 목록', '판매자와 구매자 간 대화를 확인하세요.', color, () => _requireLogin(
                 title: '채팅은 로그인 후 이용할 수 있어요',
                 action: () => _push(const ChatRoomListScreen()),
               )),
-          _AllMenuEntry('communication:reviews', Icons.rate_review_rounded, '거래 후기', '받은 후기와 작성한 후기를 확인하세요.', () => _requireLogin(
+          _AllMenuEntry('communication:reviews', Icons.rate_review_rounded, '거래 후기', '받은 후기와 작성한 후기를 확인하세요.', color, () => _requireLogin(
                 title: '후기는 로그인 후 이용할 수 있어요',
                 action: () => _push(const MyReviewsScreen()),
               )),
         ];
       case _AllMenuCategory.support:
+        final color = _colorOf(_AllMenuCategory.support);
         return [
-          _AllMenuEntry('support:email', Icons.mail_outline_rounded, '문의 메일 보내기', '문의 내용을 메일로 전달하세요.', _openSupportEmail),
-          _AllMenuEntry('support:reports', Icons.report_rounded, '신고 이력', '내가 접수한 신고와 처리 상태를 확인하세요.', () => _requireLogin(
+          _AllMenuEntry('support:email', Icons.mail_outline_rounded, '문의 메일 보내기', '문의 내용을 메일로 전달하세요.', color, _openSupportEmail),
+          _AllMenuEntry('support:reports', Icons.report_rounded, '신고 이력', '내가 접수한 신고와 처리 상태를 확인하세요.', color, () => _requireLogin(
                 title: '신고 이력은 로그인 후 이용할 수 있어요',
                 action: () => _push(const MyReportHistoryScreen()),
               )),
-          _AllMenuEntry('support:notices', Icons.campaign_rounded, '공지사항', '서비스 안내와 업데이트 소식을 확인하세요.', () => _push(const EventListScreen())),
+          _AllMenuEntry('support:notices', Icons.campaign_rounded, '공지사항', '서비스 안내와 업데이트 소식을 확인하세요.', color, () => _push(const EventListScreen())),
         ];
       case _AllMenuCategory.settings:
+        final color = _colorOf(_AllMenuCategory.settings);
         return [
-          _AllMenuEntry('settings:app', Icons.settings_rounded, '앱 설정', '앱 사용 환경을 설정하세요.', () => _push(MySettingsScreen(onLogout: _logout))),
-          _AllMenuEntry('settings:notifications', Icons.notifications_outlined, '알림 설정', '입찰·채팅·거래 알림을 관리하세요.', () => _push(MySettingsScreen(onLogout: _logout))),
-          _AllMenuEntry('settings:version', Icons.info_outline_rounded, '버전·업데이트 확인', '현재 버전과 업데이트 여부를 확인하세요.', () => _push(MySettingsScreen(onLogout: _logout))),
-          _AllMenuEntry('settings:logout', Icons.logout_rounded, '로그아웃', '현재 계정에서 로그아웃합니다.', _logout),
+          _AllMenuEntry('settings:app', Icons.settings_rounded, '앱 설정', '앱 사용 환경을 설정하세요.', color, () => _push(MySettingsScreen(onLogout: _logout))),
+          _AllMenuEntry('settings:notifications', Icons.notifications_outlined, '알림 설정', '입찰·채팅·거래 알림을 관리하세요.', color, () => _push(MySettingsScreen(onLogout: _logout))),
+          _AllMenuEntry('settings:version', Icons.info_outline_rounded, '버전·업데이트 확인', '현재 버전과 업데이트 여부를 확인하세요.', color, () => _push(MySettingsScreen(onLogout: _logout))),
+          _AllMenuEntry('settings:logout', Icons.logout_rounded, '로그아웃', '현재 계정에서 로그아웃합니다.', color, _logout),
         ];
     }
   }
 
-  List<_AllMenuEntry> get _allFavoriteCandidates {
-    final categoryEntries = HomeTab.categories
+  List<_AllMenuEntry> _categoryEntries() {
+    final color = _colorOf(_AllMenuCategory.categories);
+    return HomeTab.categories
         .where((item) => item.name != '전체보기')
         .map((category) => _AllMenuEntry(
               'category:${category.name}',
               Icons.sell_outlined,
               category.name,
-              '${category.name} 카테고리 경매를 확인하세요.',
+              AppCategories.categoryTaglines[category.name] ?? '${category.name} 관련 경매를 확인하세요.',
+              color,
               () => _push(CategoryAuctionListScreen(category: category.name)),
-            ));
+            ))
+        .toList();
+  }
+
+  List<_AllMenuEntry> get _allFavoriteCandidates {
     return <_AllMenuEntry>[
       ..._auctionItems,
       ..._detailEntriesFor(_AllMenuCategory.activity),
       ..._detailEntriesFor(_AllMenuCategory.communication),
       ..._detailEntriesFor(_AllMenuCategory.support),
       ..._detailEntriesFor(_AllMenuCategory.settings),
-      ...categoryEntries,
+      ..._categoryEntries(),
       _AllMenuEntry(
         'favorite:products',
         Icons.favorite_rounded,
         '찜한 경매 보기',
         '관심 표시한 경매를 한곳에서 확인하세요.',
+        _colorOf(_AllMenuCategory.activity),
         () => _requireLogin(
           title: '찜한 경매는 로그인 후 볼 수 있어요',
           action: () => _push(const ProductCollectionScreen(mode: ProductCollectionMode.favorites)),
@@ -427,96 +458,126 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
     return _AllMenuCategoryButton(
       label: label,
       icon: icon,
+      color: _colorOf(category),
       selected: _selected == category,
       onTap: () => setState(() => _selected = category),
     );
   }
 
-  Widget _menuRow(_AllMenuEntry entry) {
+  Widget _menuRow(_AllMenuEntry entry, {bool showDivider = true}) {
     final favorite = _favoriteMenus.contains(entry.id);
-    return InkWell(
-      onTap: entry.onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(width: 34, child: Icon(entry.icon, size: 20, color: const Color(0xFF475569))),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: entry.onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(entry.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
-                  const SizedBox(height: 3),
-                  Text(entry.description, style: const TextStyle(fontSize: 12.5, height: 1.3, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: entry.color.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(entry.icon, size: 20, color: entry.color),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
+                        const SizedBox(height: 3),
+                        Text(entry.description, style: const TextStyle(fontSize: 12.5, height: 1.3, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: () => _toggleFavoriteMenu(entry.id),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(favorite ? Icons.star_rounded : Icons.star_border_rounded, size: 22, color: favorite ? kGoldAccent : const Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFCBD5E1)),
                 ],
               ),
             ),
-            IconButton(
-              tooltip: favorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
-              onPressed: () => _toggleFavoriteMenu(entry.id),
-              icon: Icon(favorite ? Icons.star_rounded : Icons.star_border_rounded, color: favorite ? kGoldAccent : const Color(0xFF94A3B8)),
-            ),
-          ],
+          ),
         ),
-      ),
+        if (showDivider)
+          const Padding(
+            padding: EdgeInsets.only(left: 52),
+            child: Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+          ),
+      ],
     );
   }
 
   Widget _buildRows(List<_AllMenuEntry> entries) {
-    return Column(children: entries.map(_menuRow).toList());
+    return Column(
+      children: [
+        for (var i = 0; i < entries.length; i++) _menuRow(entries[i], showDivider: i != entries.length - 1),
+      ],
+    );
   }
 
-  Widget _buildCategoryMenus() {
-    final entries = HomeTab.categories
-        .where((item) => item.name != '전체보기')
-        .map((category) => _AllMenuEntry(
-              'category:${category.name}',
-              Icons.sell_outlined,
-              category.name,
-              '${category.name} 관련 경매를 확인하세요.',
-              () => _push(CategoryAuctionListScreen(category: category.name)),
-            ))
-        .toList();
-    return _buildRows(entries);
-  }
+  Widget _buildCategoryMenus() => _buildRows(_categoryEntries());
 
   Widget _buildFavorites() {
     final menuEntries = _allFavoriteCandidates.where((entry) => _favoriteMenus.contains(entry.id)).toList();
     if (menuEntries.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 18),
-        child: Text(
-          '즐겨찾기한 메뉴가 없어요. 각 세부 메뉴의 별을 눌러 추가해보세요.',
-          style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700, height: 1.4),
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.star_border_rounded, size: 34, color: kGoldAccent.withOpacity(0.6)),
+            const SizedBox(height: 10),
+            const Text(
+              '즐겨찾기한 메뉴가 없어요',
+              style: TextStyle(color: Color(0xFF111827), fontWeight: FontWeight.w900, fontSize: 14.5),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '자주 쓰는 메뉴의 별 아이콘을 눌러 여기에 모아보세요.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, height: 1.4, fontSize: 12.5),
+            ),
+          ],
         ),
       );
     }
-    return _buildRows(menuEntries);
+    return _MenuSectionCard(child: _buildRows(menuEntries));
   }
 
   Widget _buildAllMenus() {
-    final categories = HomeTab.categories
-        .where((item) => item.name != '전체보기')
-        .map((category) => _AllMenuEntry(
-              'category:${category.name}',
-              Icons.sell_outlined,
-              category.name,
-              '${category.name} 관련 경매를 확인하세요.',
-              () => _push(CategoryAuctionListScreen(category: category.name)),
-            ))
-        .toList();
-
-    Widget section(String title, List<_AllMenuEntry> entries) {
+    Widget section(String title, Color color, List<_AllMenuEntry> entries) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.only(bottom: 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            _buildRows(entries),
+            Row(
+              children: [
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _MenuSectionCard(child: _buildRows(entries)),
           ],
         ),
       );
@@ -525,12 +586,12 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        section('전체 카테고리', categories),
-        section('경매', _auctionItems),
-        section('나의 활동', _detailEntriesFor(_AllMenuCategory.activity)),
-        section('소통', _detailEntriesFor(_AllMenuCategory.communication)),
-        section('고객 지원', _detailEntriesFor(_AllMenuCategory.support)),
-        section('설정', _detailEntriesFor(_AllMenuCategory.settings)),
+        section('전체 카테고리', _colorOf(_AllMenuCategory.categories), _categoryEntries()),
+        section('경매', _colorOf(_AllMenuCategory.auctions), _auctionItems),
+        section('나의 활동', _colorOf(_AllMenuCategory.activity), _detailEntriesFor(_AllMenuCategory.activity)),
+        section('소통', _colorOf(_AllMenuCategory.communication), _detailEntriesFor(_AllMenuCategory.communication)),
+        section('고객 지원', _colorOf(_AllMenuCategory.support), _detailEntriesFor(_AllMenuCategory.support)),
+        section('설정', _colorOf(_AllMenuCategory.settings), _detailEntriesFor(_AllMenuCategory.settings)),
       ],
     );
   }
@@ -538,8 +599,110 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
   Widget _buildDetailContent() {
     if (_selected == _AllMenuCategory.all) return _buildAllMenus();
     if (_selected == _AllMenuCategory.favorites) return _buildFavorites();
-    if (_selected == _AllMenuCategory.categories) return _buildCategoryMenus();
-    return _buildRows(_detailItems);
+    if (_selected == _AllMenuCategory.categories) return _MenuSectionCard(child: _buildCategoryMenus());
+    return _MenuSectionCard(child: _buildRows(_detailItems));
+  }
+
+  Widget _buildStatusHeader() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF334155), Color(0xFF1E293B)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.14), shape: BoxShape.circle),
+              child: const Center(child: Text('🐥', style: TextStyle(fontSize: 22))),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('로그인하고 덕옥션을 시작해보세요', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14.5)),
+                  SizedBox(height: 3),
+                  Text('찜, 채팅, 경매 관리까지 한번에 이용할 수 있어요.', style: TextStyle(color: Color(0xFFCBD5E1), fontWeight: FontWeight.w600, fontSize: 12, height: 1.3)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () => _showLoginRequiredSheet(context, title: '로그인하고 덕옥션을 이용해보세요'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF334155),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('로그인', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data() ?? <String, dynamic>{};
+        final nickname = ((data['nickname'] as String?) ?? user.displayName ?? '덕친').trim();
+        final imageUrl = (data['profileImageUrl'] as String?)?.trim();
+
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => _push(MyPageTab(onLogout: _logout)),
+            child: Row(
+              children: [
+                ClipOval(
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    color: const Color(0xFFFFE4EC),
+                    child: (imageUrl != null && imageUrl.isNotEmpty)
+                        ? Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Text('🐥', style: TextStyle(fontSize: 20))))
+                        : const Center(child: Text('🐥', style: TextStyle(fontSize: 20))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$nickname님, 안녕하세요 👋', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14.5, color: Color(0xFF111827))),
+                      const SizedBox(height: 3),
+                      const Text('마이페이지에서 프로필과 활동을 확인해보세요.', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 12, height: 1.3)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -551,43 +714,51 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
         surfaceTintColor: Colors.white,
         title: const Text('전체 메뉴', style: TextStyle(fontWeight: FontWeight.w900)),
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Column(
         children: [
-          SizedBox(
-            width: 112,
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF8FAFC),
-                border: Border(right: BorderSide(color: Color(0xFFE5E7EB))),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                children: [
-                  _sideButton(label: '전체 메뉴', icon: Icons.apps_rounded, category: _AllMenuCategory.all),
-                  _sideButton(label: '즐겨찾기', icon: Icons.star_rounded, category: _AllMenuCategory.favorites),
-                  _sideButton(label: '전체 카테고리', icon: Icons.category_rounded, category: _AllMenuCategory.categories),
-                  _sideButton(label: '경매', icon: Icons.gavel_rounded, category: _AllMenuCategory.auctions),
-                  _sideButton(label: '나의 활동', icon: Icons.person_rounded, category: _AllMenuCategory.activity),
-                  _sideButton(label: '소통', icon: Icons.forum_rounded, category: _AllMenuCategory.communication),
-                  _sideButton(label: '고객 지원', icon: Icons.support_agent_rounded, category: _AllMenuCategory.support),
-                  _sideButton(label: '설정', icon: Icons.settings_rounded, category: _AllMenuCategory.settings),
-                ],
-              ),
-            ),
-          ),
+          _buildStatusHeader(),
+          const SizedBox(height: 4),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              child: ListView(
-                key: ValueKey(_selected),
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-                children: [
-                  Text(_detailTitle, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 10),
-                  _buildDetailContent(),
-                ],
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 112,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8FAFC),
+                      border: Border(right: BorderSide(color: Color(0xFFE5E7EB))),
+                    ),
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      children: [
+                        _sideButton(label: '전체 메뉴', icon: Icons.apps_rounded, category: _AllMenuCategory.all),
+                        _sideButton(label: '즐겨찾기', icon: Icons.star_rounded, category: _AllMenuCategory.favorites),
+                        _sideButton(label: '전체 카테고리', icon: Icons.category_rounded, category: _AllMenuCategory.categories),
+                        _sideButton(label: '경매', icon: Icons.gavel_rounded, category: _AllMenuCategory.auctions),
+                        _sideButton(label: '나의 활동', icon: Icons.person_rounded, category: _AllMenuCategory.activity),
+                        _sideButton(label: '소통', icon: Icons.forum_rounded, category: _AllMenuCategory.communication),
+                        _sideButton(label: '고객 지원', icon: Icons.support_agent_rounded, category: _AllMenuCategory.support),
+                        _sideButton(label: '설정', icon: Icons.settings_rounded, category: _AllMenuCategory.settings),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: ListView(
+                      key: ValueKey(_selected),
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+                      children: [
+                        Text(_detailTitle, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 12),
+                        _buildDetailContent(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -596,33 +767,80 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
   }
 }
 
-class _AllMenuCategoryButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
+class _MenuSectionCard extends StatelessWidget {
+  final Widget child;
 
-  const _AllMenuCategoryButton({required this.label, required this.icon, required this.selected, required this.onTap});
+  const _MenuSectionCard({required this.child});
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        constraints: const BoxConstraints(minHeight: 60),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          border: Border(left: BorderSide(color: selected ? kAiAccent : Colors.transparent, width: 4)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 20, color: selected ? kAiAccent : const Color(0xFF64748B)),
-            const SizedBox(height: 4),
-            Text(label, textAlign: TextAlign.center, maxLines: 2, style: TextStyle(fontSize: 11.5, height: 1.15, fontWeight: selected ? FontWeight.w900 : FontWeight.w700, color: selected ? const Color(0xFF111827) : const Color(0xFF64748B))),
-          ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.025), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _AllMenuCategoryButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AllMenuCategoryButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            constraints: const BoxConstraints(minHeight: 60),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
+            decoration: BoxDecoration(
+              color: selected ? color.withOpacity(0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20, color: selected ? color : const Color(0xFF64748B)),
+                const SizedBox(height: 5),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.15,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                    color: selected ? const Color(0xFF111827) : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -634,14 +852,60 @@ class _AllMenuEntry {
   final IconData icon;
   final String label;
   final String description;
+  final Color color;
   final VoidCallback onTap;
-  const _AllMenuEntry(this.id, this.icon, this.label, this.description, this.onTap);
+  const _AllMenuEntry(this.id, this.icon, this.label, this.description, this.color, this.onTap);
 }
 
-class CategoryAuctionListScreen extends StatelessWidget {
+class CategoryAuctionListScreen extends StatefulWidget {
   final String category;
 
   const CategoryAuctionListScreen({super.key, required this.category});
+
+  @override
+  State<CategoryAuctionListScreen> createState() => _CategoryAuctionListScreenState();
+}
+
+class _CategoryAuctionListScreenState extends State<CategoryAuctionListScreen> {
+  // null이면 '전체'예요. 쿠지 카테고리에서만 쓰는 등급 필터입니다.
+  String? _gradeFilter;
+  // null이면 '전체'예요. 피규어/아크릴/가챠/인형/기타 — 모든 카테고리에서 씁니다.
+  String? _itemTypeFilter;
+  bool _isGridView = false;
+
+  // build()가 새로 호출될 때마다 .snapshots()를 다시 만들면 StreamBuilder가
+  // 매번 '새로운 스트림'으로 인식해서 필터 칩이나 보기 방식(목록/카드)을
+  // 누를 때마다 구독을 끊고 다시 맺어요. 그래서 그때마다 로딩 상태로
+  // 돌아가면서 카테고리 화면이 유독 느리고 버벅였던 거예요. initState에서
+  // 딱 한 번만 만들어서 재사용하도록 고쳤어요.
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _productsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _productsStream = FirebaseFirestore.instance
+        .collection('products')
+        .where('category', isEqualTo: widget.category)
+        .snapshots();
+  }
+
+  bool get _isKuji => widget.category == AppCategories.kuji;
+
+  Widget _viewModeButton(IconData icon, bool isGrid) {
+    final isActive = _isGridView == isGrid;
+    return InkWell(
+      onTap: () => setState(() => _isGridView = isGrid),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFF334155).withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 20, color: isActive ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -650,32 +914,186 @@ class CategoryAuctionListScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
-        title: Text(category, style: const TextStyle(fontWeight: FontWeight.w900)),
+        title: Text(widget.category, style: const TextStyle(fontWeight: FontWeight.w900)),
+        actions: [
+          _viewModeButton(Icons.view_list_rounded, false),
+          const SizedBox(width: 4),
+          _viewModeButton(Icons.grid_view_rounded, true),
+          const SizedBox(width: 8),
+        ],
       ),
-      body: ValueListenableBuilder<List<ProductItem>>(
-        valueListenable: DuckAuctionStore.registeredAuctions,
-        builder: (context, products, _) {
-          final filtered = products.where((product) {
-            return product.isAuctionActive && product.category.trim() == category.trim();
-          }).toList()
-            ..sort((a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
-                .compareTo(a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
-
-          if (filtered.isEmpty) {
+      // 예전에는 이 화면 등 상품 목록 여러 곳이 이 기기에만 있는 로컬
+      // 캐시(DuckAuctionStore.registeredAuctions)를 봤어요. 그래서 다른
+      // 계정/기기에서 등록한 상품은 안 보이는 문제가 있었어요. 카테고리
+      // 화면은 Firestore를 직접 구독해서 누가 등록했든 실시간으로 보이게
+      // 바꿨어요. orderBy까지 같이 걸면 복합 색인이 새로 필요해지니
+      // 정렬은 받아온 뒤 화면에서 처리합니다.
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _productsStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
             return Center(
-              child: Text(
-                '$category 카테고리에 진행 중인 경매가 없어요.',
-                style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w800),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Text(
+                  '${widget.category} 상품을 불러오지 못했어요. 잠시 후 다시 시도해주세요.\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700),
+                ),
               ),
             );
           }
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            itemCount: filtered.length,
-            itemBuilder: (context, index) => ProductListTile(product: filtered[index]),
+          final allProducts = (snapshot.data?.docs ?? const [])
+              .map(ProductItem.fromFirestore)
+              .where((product) => product.isAuctionActive)
+              .toList()
+            ..sort((a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+                .compareTo(a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
+
+          // 쿠지 카테고리는 등급(상위상/하위상)만, 나머지 카테고리는
+          // 세부 카테고리(피규어/아크릴/가챠/인형/기타)만 걸 수 있어요.
+          // 두 필터를 동시에 보여주지 않습니다.
+          final filtered = allProducts.where((product) {
+            if (_isKuji) {
+              return _gradeFilter == null || product.kujiGrade == _gradeFilter;
+            }
+            return _itemTypeFilter == null || product.itemType == _itemTypeFilter;
+          }).toList();
+
+          return Column(
+            children: [
+              _ListFilterBar(
+                resultCount: filtered.length,
+                options: _isKuji ? AppCategories.kujiGrades : AppCategories.itemTypes,
+                selected: _isKuji ? _gradeFilter : _itemTypeFilter,
+                onSelected: (value) => setState(() {
+                  if (_isKuji) {
+                    _gradeFilter = value;
+                  } else {
+                    _itemTypeFilter = value;
+                  }
+                }),
+              ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Text(
+                          '${widget.category} 카테고리에 진행 중인 경매가 없어요.',
+                          style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w800),
+                        ),
+                      )
+                    : _isGridView
+                        ? GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                            // ProductCard는 사진(128) + 글자 영역이 폭과
+                            // 상관없이 항상 거의 같은 높이라, 폭 비율로
+                            // 셀 높이를 정하는 childAspectRatio를 쓰면 화면이
+                            // 넓을수록 셀이 카드보다 훨씬 커져서 아래쪽에
+                            // 빈 공간이 크게 남았어요. 높이를 고정값으로
+                            // 직접 지정해서 그 공백을 없앴어요.
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 200,
+                              // 판매자·태그 줄이 추가되면서 카드가 더
+                              // 길어져 216 → 240으로 같이 늘렸어요.
+                              // 판매자명/태그를 두 줄로 나누면서 다시
+                              // 240 → 256으로 늘려 overflow를 없앴어요.
+                              mainAxisExtent: 256,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                            ),
+                            itemCount: filtered.length,
+                            // width: null이면 ProductCard가 164 고정폭 대신
+                            // 그리드 셀 폭에 맞춰 늘어나요.
+                            itemBuilder: (context, index) => ProductCard(product: filtered[index], width: null),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) => ProductListTile(product: filtered[index]),
+                          ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+// 쇼핑몰 상품 목록 화면에서 흔히 보이는, "상품 N개" + 얇은 구분선으로 나뉜
+// 텍스트 탭 형태예요. 알록달록한 필터 버블보다 훨씬 차분하고 목록 화면
+// 같은 느낌을 줘서 이 스타일로 바꿨어요.
+class _ListFilterBar extends StatelessWidget {
+  final int resultCount;
+  final List<String> options;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  const _ListFilterBar({
+    required this.resultCount,
+    required this.options,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(String? option, String label) {
+      final isSelected = selected == option;
+      return InkWell(
+        onTap: () => onSelected(option),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+              color: isSelected ? const Color(0xFF111827) : const Color(0xFF9CA3AF),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final tabs = <Widget>[tab(null, '전체')];
+    for (final option in options) {
+      tabs.add(Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Container(width: 1, height: 10, color: const Color(0xFFE5E7EB)),
+      ));
+      tabs.add(tab(option, option));
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1)),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '상품 $resultCount개',
+            style: const TextStyle(fontSize: 12.5, color: Color(0xFF9CA3AF), fontWeight: FontWeight.w700),
+          ),
+          // Spacer랑 Flexible을 같이 쓰면 남은 공간을 절반씩 나눠 가지면서
+          // 탭이 오른쪽 끝까지 안 붙고 그 사이에 빈 공간이 남았어요.
+          // Expanded+Align 하나로만 오른쪽 끝에 딱 붙게 고쳤어요.
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: Row(mainAxisSize: MainAxisSize.min, children: tabs),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -690,6 +1108,8 @@ class _CategoryGrid extends StatelessWidget {
     switch (name) {
       case '진격의 거인':
         return '진격의\n거인';
+      case '나의 히어로 아카데미':
+        return '나의 히어로\n아카데미';
       case '전체보기':
         return '전체\n보기';
       default:
@@ -788,12 +1208,16 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 23, color: _iconColor),
-          const SizedBox(width: 6),
+          Icon(icon, size: 20, color: _iconColor),
+          const SizedBox(width: 5),
         ],
         Text(
           title,
-          style: AppTextStyles.sectionTitle,
+          style: AppTextStyles.sectionTitle.copyWith(
+            fontFamily: null,
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const Spacer(),
         if (trailing != null)
@@ -808,8 +1232,8 @@ class _SectionHeader extends StatelessWidget {
                     trailing!,
                     style: const TextStyle(
                       color: Color(0xFF6B7280),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(width: 2),
@@ -887,7 +1311,10 @@ class _HorizontalProductListState extends State<_HorizontalProductList> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 278,
+      // ProductCard 하단에 판매자·태그 줄이 추가되면서 카드 높이가
+      // 늘어나, 잘리지 않게 244 → 266으로 같이 늘렸어요.
+      // 판매자명/태그를 두 줄로 나누면서 다시 266 → 282로 늘렸어요.
+      height: 282,
       child: Stack(
         children: [
           ScrollConfiguration(
@@ -898,7 +1325,7 @@ class _HorizontalProductListState extends State<_HorizontalProductList> {
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.only(right: 26),
               itemCount: widget.products.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, index) => ProductCard(product: widget.products[index]),
             ),
           ),
@@ -947,19 +1374,19 @@ class _HorizontalProductListState extends State<_HorizontalProductList> {
           if (_canScrollLeft)
             Positioned(
               left: 0,
-              top: 104,
+              top: 88,
               child: _HorizontalScrollButton(
                 icon: Icons.chevron_left_rounded,
-                onTap: () => _scrollBy(-192),
+                onTap: () => _scrollBy(-174),
               ),
             ),
           if (_canScrollRight)
             Positioned(
               right: 0,
-              top: 104,
+              top: 88,
               child: _HorizontalScrollButton(
                 icon: Icons.chevron_right_rounded,
-                onTap: () => _scrollBy(192),
+                onTap: () => _scrollBy(174),
               ),
             ),
         ],
@@ -996,9 +1423,9 @@ class _HorizontalScrollButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(icon, size: 24, color: kDuckPrimary),
+          width: 30,
+          height: 30,
+          child: Icon(icon, size: 21, color: kDuckPrimary),
         ),
       ),
     );
@@ -1007,18 +1434,20 @@ class _HorizontalScrollButton extends StatelessWidget {
 
 class ProductCard extends StatelessWidget {
   final ProductItem product;
+  // 홈 화면 가로 스크롤 캐러셀에서는 164 고정폭이 필요하지만, 그리드
+  // 안에서 쓸 때는 셀 폭에 맞게 채워야 해서 null이면 폭을 고정하지 않아요.
+  final double? width;
 
   const ProductCard({
     super.key,
     required this.product,
+    this.width = 164,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 178,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+    final card = InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: () {
           unawaited(DuckAuctionStore.addRecentViewedProduct(product));
           Navigator.of(context).push(
@@ -1030,7 +1459,7 @@ class ProductCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: const Color(0xFFE5E7EB)),
             boxShadow: [
               BoxShadow(
@@ -1045,30 +1474,39 @@ class ProductCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                height: 150,
+                height: 128,
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: Container(
                         color: const Color(0xFFF4F5F8),
-                        child: ProductPhoto(product: product, fontSize: 58),
+                        child: ProductPhoto(product: product, fontSize: 48),
                       ),
                     ),
+                    // 마감까지 넉넉히 남은 활성 경매는 굳이 안 보여주고,
+                    // 마감 임박(3시간 이하)이거나 활성 상태가 아닐 때만 보여요.
+                    if (!product.isAuctionActive || product.isEndingSoon)
+                      Positioned(
+                        left: 7,
+                        top: 7,
+                        child: _TimeBadge(text: product.isAuctionActive ? product.time : product.statusLabel),
+                      ),
                     Positioned(
-                      left: 8,
-                      top: 8,
-                      child: _TimeBadge(text: product.isAuctionActive ? product.time : product.statusLabel),
-                    ),
-                    Positioned(
-                      right: 8,
-                      top: 8,
+                      right: 7,
+                      top: 7,
                       child: _StatusBadge(product: product),
                     ),
+                    if (product.isLowestAuction)
+                      const Positioned(
+                        left: 7,
+                        bottom: 7,
+                        child: _AuctionTypeBadge(),
+                      ),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1077,35 +1515,37 @@ class ProductCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w900,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
                         color: Color(0xFF111827),
                         letterSpacing: -0.35,
                       ),
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 5),
                     Text(
                       '현재가 ${product.price}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Color(0xFF111827),
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w900,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         Expanded(
                           child: Text(
-                            '입찰 ${product.bids}',
+                            product.postedAgoLabel.isEmpty
+                                ? '입찰 ${product.bids}'
+                                : '입찰 ${product.bids} · ${product.postedAgoLabel}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Color(0xFF6B7280),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -1115,20 +1555,64 @@ class ProductCard extends StatelessWidget {
                           product.likes,
                           style: const TextStyle(
                             color: kAiAccent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
                     ),
+                    if (product.sellerName.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              product.sellerName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (product.isSellerFirstListing) ...[
+                            const SizedBox(width: 3),
+                            const Text('🆕', style: TextStyle(fontSize: 10.5)),
+                          ],
+                          // 목록형과 동일하게 프로필에 설정한 배지(최대 3개)를
+                          // 전부 보여줘요.
+                          for (final id in product.sellerBadgeIds)
+                            if (sellerBadgeEmoji(id) != null) ...[
+                              const SizedBox(width: 3),
+                              Text(sellerBadgeEmoji(id)!, style: const TextStyle(fontSize: 10.5)),
+                            ],
+                        ],
+                      ),
+                    ],
+                    if (product.tags.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        product.tags.map((tag) => '#$tag').join(''),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
         ),
-      ),
-    );
+      );
+    if (width == null) return card;
+    return SizedBox(width: width, child: card);
   }
 }
 
@@ -1190,6 +1674,526 @@ class _TimeBadge extends StatelessWidget {
   }
 }
 
+class _AuctionTypeBadge extends StatelessWidget {
+  const _AuctionTypeBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7C3AED).withOpacity(0.94),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: const Text(
+        '최저가',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+/// 홈 카드와 동일한 그리드 스타일로 경매 카드(ProductCard)를 격자로 보여줘요.
+/// 여러 화면에서 재사용해요(최근 본 경매, 찜/필터 결과 등).
+///  - [shrinkWrap]=true 이면 스크롤을 자체적으로 하지 않고(부모 스크롤에 얹힘)
+///    내용 높이만큼만 차지해요(예: 다른 리스트/컬럼 안에 넣을 때).
+class AuctionCardGrid extends StatelessWidget {
+  final List<ProductItem> products;
+  final bool shrinkWrap;
+  final EdgeInsetsGeometry padding;
+
+  const AuctionCardGrid({
+    super.key,
+    required this.products,
+    this.shrinkWrap = false,
+    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 24),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: padding,
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      // 홈 카드 그리드와 동일한 규격(폭 최대 200, 셀 높이 256 고정).
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 200,
+        mainAxisExtent: 256,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+      ),
+      itemCount: products.length,
+      // width: null이면 ProductCard가 164 고정폭 대신 그리드 셀 폭에 맞춰 늘어나요.
+      itemBuilder: (context, index) =>
+          ProductCard(product: products[index], width: null),
+    );
+  }
+}
+
+/// 찜 목록 화면 — 상단에 [카테고리 필터]와 우측 ["종료 삭제"](마감·유찰·낙찰돼 끝난
+/// 찜을 한 번에 정리) 버튼을 갖춘 찜 전용 화면이에요.
+/// ProductCollectionScreen의 favorites 모드가 이 화면을 사용합니다.
+class FavoritesCollectionScreen extends StatefulWidget {
+  const FavoritesCollectionScreen({super.key});
+
+  @override
+  State<FavoritesCollectionScreen> createState() =>
+      _FavoritesCollectionScreenState();
+}
+
+class _FavoritesCollectionScreenState extends State<FavoritesCollectionScreen> {
+  static const String _allCategory = '전체';
+  String _category = _allCategory;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(DuckAuctionStore.loadFavoriteProductIds());
+  }
+
+  List<String> get _categoryOptions =>
+      <String>[_allCategory, ...AppCategories.names];
+
+  // 찜 여부: 저장된 키는 상품 id(없으면 제목)로 매칭해요(_filterProducts와 동일 규칙).
+  bool _isFavorited(ProductItem p, Set<String> favorites) {
+    final id = p.id;
+    if (id != null && id.isNotEmpty) return favorites.contains(id);
+    return favorites.contains(p.title);
+  }
+
+  // 끝난 찜: 진행 중(active)이 아니면 마감·유찰·낙찰로 종료된 것으로 봐요.
+  bool _isEnded(ProductItem p) => p.effectiveStatus != 'active';
+
+  Future<void> _clearEnded(List<ProductItem> favProducts) async {
+    final ended = favProducts.where(_isEnded).toList();
+    if (ended.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('정리할 종료된 찜이 없어요.')),
+      );
+      return;
+    }
+    final endedCount = ended.where((p) => p.effectiveStatus == 'ended').length;
+    final failedCount = ended.where((p) => p.effectiveStatus == 'failed').length;
+    final soldCount = ended.where((p) => p.effectiveStatus == 'sold').length;
+    final lines = <String>[
+      if (endedCount > 0) '· 마감된 경매 $endedCount개',
+      if (failedCount > 0) '· 유찰된 경매 $failedCount개',
+      if (soldCount > 0) '· 낙찰된 경매 $soldCount개',
+    ].join('\n');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('종료된 찜 정리',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(
+          '끝난 경매 ${ended.length}개를 찜 목록에서 정리할게요.\n\n$lines\n\n'
+          '찜 목록에서만 사라지고, 경매나 거래 자체에는 영향을 주지 않아요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text('${ended.length}개 정리'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    var removed = 0;
+    for (final p in ended) {
+      final result = await DuckAuctionStore.toggleFavorite(p);
+      if (result.success) removed++;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(removed > 0
+            ? '종료된 찜 $removed개를 정리했어요.'
+            : '정리 중 문제가 있었어요. 잠시 후 다시 시도해주세요.'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: Row(
+          children: const [
+            Icon(Icons.favorite_rounded, color: Color(0xFFFF6F91)),
+            SizedBox(width: 8),
+            Text('찜한 경매', style: AppTextStyles.sectionTitle),
+          ],
+        ),
+      ),
+      body: ValueListenableBuilder<List<ProductItem>>(
+        valueListenable: DuckAuctionStore.registeredAuctions,
+        builder: (context, products, _) {
+          return ValueListenableBuilder<Set<String>>(
+            valueListenable: DuckAuctionStore.favoriteProductIds,
+            builder: (context, favorites, __) {
+              final favProducts = products
+                  .where((p) => _isFavorited(p, favorites))
+                  .toList();
+              final visible = _category == _allCategory
+                  ? favProducts
+                  : favProducts
+                      .where((p) => p.category == _category)
+                      .toList();
+              final endedCount = favProducts.where(_isEnded).length;
+
+              return Column(
+                children: [
+                  _buildFilterBar(endedCount, favProducts),
+                  Expanded(
+                    child: favProducts.isEmpty
+                        ? const Center(
+                            child: Text('아직 찜한 상품이 없어요.',
+                                style: TextStyle(
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.w800)),
+                          )
+                        : (visible.isEmpty
+                            ? Center(
+                                child: Text(
+                                  "'$_category' 카테고리에 찜한 경매가 없어요.",
+                                  style: const TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w800),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(
+                                    16, 12, 16, 24),
+                                itemCount: visible.length,
+                                itemBuilder: (context, index) =>
+                                    ProductListTile(product: visible[index]),
+                              )),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(int endedCount, List<ProductItem> favProducts) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(context.pagePadding, 9, context.pagePadding, 9),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: PopupMenuButton<String>(
+                initialValue: _category,
+                onSelected: (v) => setState(() => _category = v),
+                itemBuilder: (_) => _categoryOptions
+                    .map((value) =>
+                        PopupMenuItem<String>(value: value, child: Text(value)))
+                    .toList(),
+                child: _FilterPill(label: _category),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed:
+                endedCount > 0 ? () => _clearEnded(favProducts) : null,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFDC2626),
+              side: const BorderSide(color: Color(0xFFFECACA)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+            label: Text(endedCount > 0 ? '종료 삭제 ($endedCount)' : '종료 삭제'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 상품 목록을 정렬(최신/마감임박/가격/인기)만 바꿔가며 보여주는 리스트예요.
+/// 부모가 Scaffold를 제공하므로 여기서는 정렬 바 + 그리드(본문)만 반환합니다.
+/// (배너 링크 화면 — 마감 임박 경매 등 — 에서 재사용해요.)
+class _FilteredAuctionListView extends StatefulWidget {
+  final List<ProductItem> products;
+  final _AuctionSort initialSort;
+  final String emptyText;
+
+  const _FilteredAuctionListView({
+    required this.products,
+    this.initialSort = _AuctionSort.latest,
+    required this.emptyText,
+  });
+
+  @override
+  State<_FilteredAuctionListView> createState() =>
+      _FilteredAuctionListViewState();
+}
+
+class _FilteredAuctionListViewState extends State<_FilteredAuctionListView> {
+  late _AuctionSort _sort = widget.initialSort;
+
+  int _priceOf(ProductItem p) {
+    if (p.currentPrice > 0) return p.currentPrice;
+    return int.tryParse(p.price.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  }
+
+  int _popularityOf(ProductItem p) {
+    final bids = int.tryParse(p.bids.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    final likes = int.tryParse(p.likes.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    return bids * 3 + likes;
+  }
+
+  String _sortLabel(_AuctionSort v) {
+    switch (v) {
+      case _AuctionSort.latest:
+        return '최신순';
+      case _AuctionSort.deadline:
+        return '마감 임박순';
+      case _AuctionSort.priceLow:
+        return '낮은 가격순';
+      case _AuctionSort.priceHigh:
+        return '높은 가격순';
+      case _AuctionSort.popular:
+        return '인기순';
+    }
+  }
+
+  List<ProductItem> _sorted() {
+    final result = List<ProductItem>.from(widget.products);
+    switch (_sort) {
+      case _AuctionSort.latest:
+        result.sort((a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+            .compareTo(a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0)));
+        break;
+      case _AuctionSort.deadline:
+        result.sort((a, b) =>
+            (a.endAt ?? DateTime(2999)).compareTo(b.endAt ?? DateTime(2999)));
+        break;
+      case _AuctionSort.priceLow:
+        result.sort((a, b) => _priceOf(a).compareTo(_priceOf(b)));
+        break;
+      case _AuctionSort.priceHigh:
+        result.sort((a, b) => _priceOf(b).compareTo(_priceOf(a)));
+        break;
+      case _AuctionSort.popular:
+        result.sort((a, b) => _popularityOf(b).compareTo(_popularityOf(a)));
+        break;
+    }
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _sorted();
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.fromLTRB(context.pagePadding, 9, context.pagePadding, 9),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+          ),
+          child: Row(
+            children: [
+              PopupMenuButton<_AuctionSort>(
+                initialValue: _sort,
+                onSelected: (v) => setState(() => _sort = v),
+                itemBuilder: (_) => _AuctionSort.values
+                    .map((v) => PopupMenuItem<_AuctionSort>(
+                        value: v, child: Text(_sortLabel(v))))
+                    .toList(),
+                child: _FilterPill(label: _sortLabel(_sort)),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: items.isEmpty
+              ? Center(
+                  child: Text(
+                    widget.emptyText,
+                    style: const TextStyle(
+                        color: Color(0xFF64748B), fontWeight: FontWeight.w800),
+                  ),
+                )
+              : AuctionCardGrid(products: items),
+        ),
+      ],
+    );
+  }
+}
+
+/// 사업자정보 + 이용약관·개인정보처리방침을 보여주는 화면이에요.
+/// 홈 하단 '사업자정보·약관 전체보기'에서 열려요.
+class BusinessInfoScreen extends StatelessWidget {
+  const BusinessInfoScreen({super.key});
+
+  void _openLegal(BuildContext context, String title, String body) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _LegalTextScreen(title: title, body: body)),
+    );
+  }
+
+  Widget _row(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(k,
+                style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700)),
+          ),
+          Expanded(
+            child: Text(v,
+                style: const TextStyle(
+                    color: Color(0xFF334155),
+                    fontSize: 13.5,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: const Text('사업자정보', style: TextStyle(fontWeight: FontWeight.w900)),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('덕옥션 사업자정보',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 12),
+                _row('상호', '덕옥션'),
+                _row('대표자', '이현선'),
+                _row('사업자등록번호', '748-15-02875'),
+                _row('사업장 소재지', '인천광역시 미추홀구 주안로 39, 1106호(주안동)'),
+                _row('이메일', 'micket0012@gmail.com'),
+                _row('연락처', '010-4553-0838'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '덕옥션은 통신판매중개자로서 통신판매의 당사자가 아니며, 개별 판매자가 등록한 '
+            '상품·거래정보 및 거래에 대해 책임을 지지 않습니다. 상품·거래·배송·환불 등 '
+            '거래에 관한 의무와 책임은 각 판매 회원(판매자)에게 있습니다.',
+            style: TextStyle(
+                fontSize: 12, height: 1.55, color: Color(0xFF94A3B8)),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.description_outlined,
+                      color: Color(0xFF16305C)),
+                  title: const Text('서비스 이용약관',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: Color(0xFF94A3B8)),
+                  onTap: () =>
+                      _openLegal(context, '서비스 이용약관', kTermsOfServiceText),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined,
+                      color: Color(0xFF16305C)),
+                  title: const Text('개인정보처리방침',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: Color(0xFF94A3B8)),
+                  onTap: () =>
+                      _openLegal(context, '개인정보처리방침', kPrivacyPolicyText),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 약관/개인정보처리방침 등 긴 법적 문서를 스크롤로 보여주는 단순 화면이에요.
+class _LegalTextScreen extends StatelessWidget {
+  final String title;
+  final String body;
+
+  const _LegalTextScreen({required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        child: SelectableText(
+          body,
+          style: const TextStyle(fontSize: 13, height: 1.6, color: Color(0xFF334155)),
+        ),
+      ),
+    );
+  }
+}
+
 class ProductListTile extends StatelessWidget {
   final ProductItem product;
 
@@ -1200,6 +2204,10 @@ class ProductListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ListTile의 leading은 타일 전체 높이 계산 방식 때문에 92x92로 줘도
+    // 실제로는 폭보다 낮게 눌려서 사진이 가로로 길어 보이는 문제가 있었어요.
+    // 그리드 카드처럼 정확히 정사각형으로 나오도록 ListTile 대신 직접
+    // Row로 레이아웃을 짜서 사진 박스 크기를 완전히 고정했어요.
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -1207,7 +2215,9 @@ class ProductListTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
-      child: ListTile(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
         onTap: () {
           unawaited(DuckAuctionStore.addRecentViewedProduct(product));
           Navigator.of(context).push(
@@ -1216,69 +2226,127 @@ class ProductListTile extends StatelessWidget {
             ),
           );
         },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        minVerticalPadding: 10,
-        leading: Container(
-          width: 54,
-          height: 54,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF4F5F8),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: ProductPhoto(product: product, fontSize: 28),
-        ),
-        title: Text(
-          product.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w900),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${product.category} · 현재가 ${product.price} · 입찰 ${product.bids}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              SizedBox(
+                width: 116,
+                height: 116,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 116,
+                      height: 116,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4F5F8),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ProductPhoto(product: product, fontSize: 52),
+                    ),
+                    if (product.isLowestAuction)
+                      const Positioned(
+                        left: 4,
+                        bottom: 4,
+                        child: _AuctionTypeBadge(),
+                      ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 5,
-                runSpacing: 4,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      product.postedAgoLabel.isEmpty
+                          ? '${product.category} · 입찰 ${product.bids}'
+                          : '${product.category} · 입찰 ${product.bids} · ${product.postedAgoLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '현재가 ${product.price}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF111827),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            product.sellerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF4B5563),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (product.isSellerFirstListing) ...[
+                          const SizedBox(width: 4),
+                          const Text('🆕', style: TextStyle(fontSize: 13)),
+                        ],
+                        for (final id in product.sellerBadgeIds)
+                          if (sellerBadgeEmoji(id) != null) ...[
+                            const SizedBox(width: 4),
+                            Text(sellerBadgeEmoji(id)!, style: const TextStyle(fontSize: 13)),
+                          ],
+                      ],
+                    ),
+                    if (product.tags.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        product.tags.map((tag) => '#$tag').join(''),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF9CA3AF),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  _StatusBadge(product: product),
+                  const SizedBox(height: 6),
                   Text(
-                    product.sellerName,
+                    product.isAuctionActive ? product.time : product.statusLabel,
                     style: const TextStyle(
+                      color: kAiAccent,
                       fontSize: 12,
-                      color: Color(0xFF4B5563),
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  SellerBadge(salesCount: product.sellerSalesCount),
                 ],
               ),
             ],
           ),
-        ),
-        trailing: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _StatusBadge(product: product),
-            const SizedBox(height: 6),
-            Text(
-              product.isAuctionActive ? product.time : product.statusLabel,
-              style: const TextStyle(
-                color: kAiAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
         ),
       ),
     );

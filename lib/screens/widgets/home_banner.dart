@@ -19,7 +19,7 @@ class _HeroBannerState extends State<_HeroBanner> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 1);
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 6), (_) {
       if (!mounted || !_pageController.hasClients) return;
       final bannerCount = _lastBannerCount <= 0 ? 1 : _lastBannerCount;
       if (bannerCount <= 1) return;
@@ -45,29 +45,49 @@ class _HeroBannerState extends State<_HeroBanner> {
           description: '좋아하는 굿즈를 발견하고\n경매에 참여해보세요!',
           actionText: '마감 임박 경매 보기',
           imagePath: 'assets/image/image/main_duck.png',
-          backgroundColor: const Color(0xFFF1F5F9),
-          borderColor: const Color(0xFFCBD5E1),
+          backgroundColor: const Color(0xFFF4F7FC),
+          borderColor: const Color(0xFFE5E7EB),
           accentColor: kAiAccent,
         ),
         const _BannerData(
           eyebrow: '덕옥션 파트너',
           title: '광고주 모집',
-          description: '굿즈샵 · 개인 판매자 모두 가능!\n메인 배너에서 상품을 알려보세요.',
+          description: '홈 상단 메인 배너에 상점·상품을 노출해요.',
           actionText: '광고 문의하기',
           icon: Icons.campaign_rounded,
-          backgroundColor: Color(0xFFF1F5F9),
-          borderColor: Color(0xFFCBD5E1),
+          backgroundColor: Color(0xFFF4F7FC),
+          borderColor: Color(0xFFE5E7EB),
           accentColor: kBannerBlue,
         ),
         const _BannerData(
-          eyebrow: '신규 판매자 환영',
-          title: '첫 경매 등록 혜택',
-          description: '첫 경매 등록 수수료 혜택과\n판매자 뱃지 혜택을 준비 중이에요.',
+          eyebrow: '덕옥션 파트너',
+          title: '카테고리 추천 광고',
+          description: '추천 굿즈의 카테고리를\n별도 메뉴로 독립해 노출해요.',
+          actionText: '광고 문의하기',
+          icon: Icons.grid_view_rounded,
+          backgroundColor: Color(0xFFF4F7FC),
+          borderColor: Color(0xFFE5E7EB),
+          accentColor: kBannerBlue,
+        ),
+        const _BannerData(
+          eyebrow: '출시 기념 이벤트',
+          title: '2주간 판매 수수료 무료',
+          description: '이벤트 기간에 등록한 경매는\n판매 수수료가 0원이에요.',
           actionText: '이벤트 확인하기',
           icon: Icons.card_giftcard_rounded,
-          backgroundColor: Color(0xFFF1F5F9),
-          borderColor: Color(0xFFCBD5E1),
+          backgroundColor: Color(0xFFF4F7FC),
+          borderColor: Color(0xFFE5E7EB),
           accentColor: kBannerOrange,
+        ),
+        const _BannerData(
+          eyebrow: '5주 한정 이벤트',
+          title: '최저가 경매 이벤트',
+          description: '5주 동안 진행되는\n최저가 경매에 참여해보세요!',
+          actionText: '이벤트 확인하기',
+          icon: Icons.trending_down_rounded,
+          backgroundColor: Color(0xFFF4F7FC),
+          borderColor: Color(0xFFE5E7EB),
+          accentColor: Color(0xFF14B8A6),
         ),
       ];
 
@@ -98,9 +118,10 @@ class _HeroBannerState extends State<_HeroBanner> {
         final banners = remoteBanners.isNotEmpty ? remoteBanners : _fallbackBanners;
         _lastBannerCount = banners.length;
         if (_currentIndex >= banners.length) _currentIndex = 0;
+        final bannerHeight = context.responsive(phone: 204.0, tablet: 240.0, tabletLarge: 264.0);
 
         return SizedBox(
-          height: 228,
+          height: bannerHeight,
           child: Stack(
             children: [
               ScrollConfiguration(
@@ -151,34 +172,16 @@ class _HeroBannerState extends State<_HeroBanner> {
                 ),
               ),
           Positioned(
-            left: 8,
-            top: 0,
-            bottom: 0,
-            child: _BannerArrowButton(
-              icon: Icons.chevron_left,
-              onTap: () => _moveBanner(-1),
-            ),
-          ),
-          Positioned(
-            right: 8,
-            top: 0,
-            bottom: 0,
-            child: _BannerArrowButton(
-              icon: Icons.chevron_right,
-              onTap: () => _moveBanner(1),
-            ),
-          ),
-          Positioned(
-            left: 24,
-            bottom: 18,
+            left: 18,
+            bottom: 13,
             child: Row(
               children: List.generate(
                 banners.length,
                 (index) => AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   margin: const EdgeInsets.only(right: 6),
-                  width: _currentIndex == index ? 18 : 8,
-                  height: 8,
+                  width: _currentIndex == index ? 16 : 7,
+                  height: 7,
                   decoration: BoxDecoration(
                     color: _currentIndex == index
                         ? banners[_currentIndex].accentColor
@@ -190,8 +193,8 @@ class _HeroBannerState extends State<_HeroBanner> {
             ),
           ),
           Positioned(
-            right: 22,
-            bottom: 16,
+            right: 16,
+            bottom: 11,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               transitionBuilder: (child, animation) => FadeTransition(
@@ -256,9 +259,9 @@ class _BannerArrowButton extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: 34,
-            height: 34,
-            child: Icon(icon, size: 24, color: const Color(0xFF334155)),
+            width: 24,
+            height: 24,
+            child: Icon(icon, size: 18, color: const Color(0xFF16305C)),
           ),
         ),
       ),
@@ -318,8 +321,8 @@ class _BannerData {
       actionText: data['actionText'] as String? ?? '자세히 보기',
       imageUrl: data['imageUrl'] as String?,
       storagePath: (data['storagePath'] as String?) ?? (data['imageStoragePath'] as String?),
-      backgroundColor: parseColor(data['backgroundColor'], const Color(0xFFF1F5F9)),
-      borderColor: parseColor(data['borderColor'], const Color(0xFFCBD5E1)),
+      backgroundColor: parseColor(data['backgroundColor'], const Color(0xFFF4F7FC)),
+      borderColor: parseColor(data['borderColor'], const Color(0xFFE5E7EB)),
       accentColor: parseColor(data['accentColor'], kBannerBlue),
     );
   }
@@ -337,14 +340,13 @@ class _BannerCard extends StatelessWidget {
       );
       return;
     }
-
     if (data.actionText.contains('광고')) {
+      final product = data.title.contains('카테고리') ? '카테고리 추천' : '메인 배너';
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AdvertisementInquiryScreen()),
+        MaterialPageRoute(builder: (_) => AdvertisementInquiryScreen(adProduct: product)),
       );
       return;
     }
-
     if (data.actionText.contains('이벤트')) {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const EventListScreen()),
@@ -352,22 +354,23 @@ class _BannerCard extends StatelessWidget {
     }
   }
 
-  bool get _isMainDuckBanner => data.imagePath == 'assets/image/image/main_duck.png';
+  bool get _isMainDuckBanner =>
+      data.imagePath == 'assets/image/image/main_duck.png';
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 228,
+      height: context.responsive(phone: 204.0, tablet: 240.0, tabletLarge: 264.0),
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         color: data.backgroundColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: data.borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 18,
-            offset: const Offset(0, 9),
+            color: Colors.black.withOpacity(0.035),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -378,104 +381,99 @@ class _BannerCard extends StatelessWidget {
   }
 
   Widget _buildMainDuckBanner(BuildContext context) {
+    // 배너 카드 자체의 높이는 기기 구간(폰/태블릿/태블릿라지)별로 정해져 있으므로,
+    // 텍스트 크기는 여기에 맞춰 커지도록 합니다(고정된 배율 대신 실제 브레이크포인트를 따라감).
+    final bannerHeight = context.responsive(phone: 204.0, tablet: 240.0, tabletLarge: 264.0);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final isNarrow = width < 430;
+        final compact = width < 360;
+        final textScale = compact ? 0.94 : context.responsive(phone: 1.0, tablet: 1.15, tabletLarge: 1.3);
+
+        const leftPad = 26.0;
+        // 오리를 배너 오른쪽 영역에 크게(아래 살짝 크롭) 배치. 타이트 크롭된
+        // main_duck.png라 프레임을 꽉 채워 큼직하게 보입니다. 폭은 duckRegionRatio로 조절.
+        final duckRegionRatio = compact ? 0.42 : 0.44;
+        final duckRegion = width * duckRegionRatio; // 오리가 차지할 오른쪽 폭
+        final textRightInset = duckRegion + 4;
 
         return Stack(
           clipBehavior: Clip.hardEdge,
           children: [
             Positioned(
-              right: isNarrow ? -86 : -98,
-              bottom: isNarrow ? -66 : -76,
-              child: Transform.scale(
-                scale: isNarrow ? 1.72 : 1.82,
+              right: compact ? 14 : 28,
+              bottom: -18,
+              width: duckRegion,
+              height: bannerHeight + 22,
+              child: Image.asset(
+                data.imagePath!,
+                fit: BoxFit.contain,
                 alignment: Alignment.bottomRight,
-                child: SizedBox(
-                  width: isNarrow ? 235 : 255,
-                  height: isNarrow ? 220 : 235,
-                  child: Image.asset(
-                    data.imagePath!,
-                    fit: BoxFit.contain,
-                    alignment: Alignment.bottomRight,
-                    filterQuality: FilterQuality.high,
-                    isAntiAlias: true,
-                    gaplessPlayback: true,
-                  ),
-                ),
+                filterQuality: FilterQuality.high,
+                isAntiAlias: true,
+                gaplessPlayback: true,
               ),
             ),
             Positioned(
-              left: 24,
-              top: isNarrow ? 20 : 23,
-              right: width * 0.46,
+              left: leftPad,
+              top: 16,
+              right: textRightInset,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '귀여운 굿즈를\n경매로 만나보세요!',
+                    '굿즈를 경매로\n만나보세요',
                     maxLines: 2,
-                    softWrap: true,
-                    overflow: TextOverflow.visible,
-                    style: AppTextStyles.bannerTitle.copyWith(
-                      height: 1.08,
-                      fontSize: isNarrow ? 22 : 25,
-                      letterSpacing: -1.0,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: const Color(0xFF111827),
+                      fontSize: 21 * textScale,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 7),
+                  Text(
+                    '원하는 굿즈를 발견하고\n간편하게 입찰해보세요.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      height: 1.35,
+                      fontSize: 13 * textScale,
+                      color: const Color(0xFF475569),
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.15,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   SizedBox(
-                    width: isNarrow ? 190 : 220,
-                    child: Text(
-                      '좋아하는 굿즈를 발견하고\n경매에 참여해보세요!',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        height: 1.35,
-                        fontSize: 15,
-                        color: Color(0xFF334155),
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
+                    height: 36 * textScale,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: data.accentColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 0,
+                        textStyle: TextStyle(
+                          fontSize: 12.5 * textScale,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      onPressed: () => _openBannerDestination(context),
+                      child: Text(
+                        data.actionText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: data.accentColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                      elevation: 0,
-                    ),
-                    onPressed: () => _openBannerDestination(context),
-                    child: Text(data.actionText, style: AppTextStyles.bannerButton),
-                  ),
                 ],
-              ),
-            ),
-            Positioned(
-              left: 24,
-              bottom: 20,
-              child: const SizedBox.shrink(),
-            ),
-            Positioned(
-              left: 24,
-              bottom: 20,
-              child: Offstage(
-                offstage: true,
-                child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: data.accentColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                  elevation: 0,
-                ),
-                  onPressed: () => _openBannerDestination(context),
-                  child: Text(data.actionText, style: AppTextStyles.bannerButton),
-                ),
               ),
             ),
           ],
@@ -485,13 +483,33 @@ class _BannerCard extends StatelessWidget {
   }
 
   Widget _buildDefaultBanner(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 22, 0, 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: DefaultTextStyle(
-              style: const TextStyle(color: Color(0xFF111827)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final compact = width < 360;
+        // 오리 배너와 같은 방식으로, 태블릿/데스크톱에서는 텍스트·아이콘도 함께 커지도록 합니다.
+        final textScale = compact ? 0.94 : context.responsive(phone: 1.0, tablet: 1.15, tabletLarge: 1.3);
+        final visualWidth = (compact ? 104.0 : 122.0) * textScale;
+        // 왼쪽 아래 페이지네이션 점(Positioned left:18, bottom:13, 높이 7)과 버튼이
+        // 겹치던 문제 수정: 기존엔 bottom:18이라 버튼 하단이 점과 2px 겹쳤습니다.
+        // 점 영역(13~20) 위로 충분히 띄우도록 32로 늘렸습니다.
+        const bottomInset = 32.0;
+
+        return MediaQuery(
+          // Z플립처럼 시스템 글꼴 크기가 큰 기기에서 배너 텍스트가 함께 커지면서
+          // 아래 버튼과 겹치던 문제를 막아요. 배너 안에서는 글꼴 확대를 최대
+          // 1.1배로만 허용해서 고정 높이 안에 안전하게 들어가게 합니다.
+          data: MediaQuery.of(context).copyWith(
+            textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.1),
+          ),
+          child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              left: 26,
+              top: 16,
+              right: visualWidth + 40,
+              bottom: bottomInset,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -499,98 +517,115 @@ class _BannerCard extends StatelessWidget {
                     data.eyebrow,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bannerEyebrow,
+                    style: TextStyle(
+                      fontSize: 12 * textScale,
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   Text(
                     data.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bannerTitle,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    data.description,
-                    style: const TextStyle(
-                      height: 1.35,
-                      fontSize: 15,
-                      color: Color(0xFF334155),
+                    style: TextStyle(
+                      fontSize: 21 * textScale,
+                      color: const Color(0xFF111827),
                       fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 22),
+                  const SizedBox(height: 7),
+                  Expanded(
+                    child: Text(
+                      data.description,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        height: 1.35,
+                        fontSize: 13 * textScale,
+                        color: const Color(0xFF475569),
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.15,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 36 * textScale,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
                         backgroundColor: data.accentColor,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         elevation: 0,
+                        textStyle: TextStyle(
+                          fontSize: 12.5 * textScale,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       onPressed: () => _openBannerDestination(context),
-                      child: Text(data.actionText, style: AppTextStyles.bannerButton),
+                      child: Text(
+                        data.actionText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-          SizedBox(
-            width: 168,
-            height: 190,
-            child: (data.imagePath != null || data.imageSource != null)
-                ? Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned(
-                        right: -8,
-                        bottom: -10,
-                        child: SizedBox(
-                          width: 190,
-                          height: 190,
-                          child: data.imagePath != null
-                              ? Image.asset(
-                                  data.imagePath!,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.high,
-                                  isAntiAlias: true,
-                                  gaplessPlayback: true,
-                                )
-                              : FirebaseStorageImage(
-                                  source: data.imageSource!,
-                                  fit: BoxFit.contain,
-                                  fallback: const SizedBox.shrink(),
-                                ),
+            Positioned(
+              right: 34,
+              top: 0,
+              bottom: 0,
+              width: visualWidth,
+              child: (data.imagePath != null || data.imageSource != null)
+                  ? Center(
+                      child: SizedBox(
+                        width: visualWidth,
+                        height: visualWidth,
+                        child: data.imagePath != null
+                            ? Image.asset(
+                                data.imagePath!,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                                isAntiAlias: true,
+                                gaplessPlayback: true,
+                              )
+                            : FirebaseStorageImage(
+                                source: data.imageSource!,
+                                fit: BoxFit.contain,
+                                fallback: const SizedBox.shrink(),
+                              ),
+                      ),
+                    )
+                  : Center(
+                      child: Container(
+                        width: (compact ? 88.0 : 102.0) * textScale,
+                        height: (compact ? 88.0 : 102.0) * textScale,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.82),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: data.accentColor.withOpacity(0.18),
+                          ),
+                        ),
+                        child: Icon(
+                          data.icon,
+                          size: (compact ? 48.0 : 56.0) * textScale,
+                          color: data.accentColor,
                         ),
                       ),
-                    ],
-                  )
-                : Center(
-                    child: Container(
-                      width: 118,
-                      height: 118,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.78),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: data.accentColor.withOpacity(0.20)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: data.accentColor.withOpacity(0.10),
-                            blurRadius: 22,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Icon(data.icon, size: 70, color: data.accentColor),
                     ),
-                  ),
+            ),
+          ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

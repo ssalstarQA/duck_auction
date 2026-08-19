@@ -1,8 +1,8 @@
 {
   "project_info": {
     "project_number": "203119332761",
-    "project_id": "duckauction",
-    "storage_bucket": "duckauction.firebasestorage.app"
+    "project_id": "duck-auction",
+    "storage_bucket": "duck-auction.firebasestorage.app"
   },
   "client": [
     {

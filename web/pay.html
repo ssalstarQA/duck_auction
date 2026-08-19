@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>덕옥션 결제 - 카드결제 (토스페이먼츠)</title>
+<meta name="robots" content="noindex">
+<script src="https://js.tosspayments.com/v1/payment-widget"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: #F8FAFC; color: #16305C; }
+  .wrap { max-width: 460px; margin: 0 auto; padding: 40px 20px; }
+  .card { background: #fff; border: 1px solid #E5E7EB; border-radius: 18px; padding: 26px 22px; box-shadow: 0 6px 24px rgba(22,48,92,0.06); }
+  .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .brand span { font-weight: 900; font-size: 18px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: #64748B; font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
+  .btn { width: 100%; height: 54px; border: 0; border-radius: 14px; background: #16305C; color: #fff; font-size: 16px; font-weight: 800; margin-top: 14px; cursor: pointer; }
+  .btn:disabled { background: #94A3B8; }
+  .result { text-align: center; padding: 10px 0; }
+  .result .ic { font-size: 44px; }
+  .result h2 { font-size: 20px; margin: 10px 0 6px; }
+  .result p { color: #64748B; font-size: 13.5px; word-break: break-all; margin: 4px 0; }
+  .note { color: #94A3B8; font-size: 12px; margin-top: 18px; line-height: 1.6; text-align: center; }
+  a { color: #16305C; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="brand"><img src="icons/Icon-192.png" alt="덕옥션"><span>덕옥션</span></div>
+    <div id="view"></div>
+    <div id="payment-method"></div>
+    <div id="agreement"></div>
+    <div id="actions"></div>
+  </div>
+  <div class="note">
+    본 페이지는 카드결제(토스페이먼츠) 결제창 확인용 결제 화면입니다.<br>
+    상호: 덕옥션 · 대표: 이현선 · 사업자등록번호 748-15-02875<br>
+    문의: <a href="mailto:micket0012@gmail.com">micket0012@gmail.com</a> · 010-4553-0838<br>
+    <a href="terms.html">이용약관</a> · <a href="privacy.html">개인정보처리방침</a> · <a href="refund.html">환불·취소·청약철회</a>
+  </div>
+</div>
+
+<script>
+  // 토스페이먼츠 '결제위젯' 테스트 클라이언트 키.
+  // ⚠️ 정식 오픈 시 토스 개발자센터의 '실연동' 위젯 클라이언트 키로 교체하세요.
+  var CLIENT_KEY = "test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm";
+
+  var view = document.getElementById("view");
+  var methodEl = document.getElementById("payment-method");
+  var agreementEl = document.getElementById("agreement");
+  var actionsEl = document.getElementById("actions");
+
+  var params = new URLSearchParams(location.search);
+  var demo = params.get("demo");                          // 데모 결제 후 복귀 표시(success/fail)
+  var returnedCode = params.get("code");
+  var returnedKey = params.get("paymentKey");
+  var amount = parseInt(params.get("amount") || "1000", 10);
+  if (!(amount > 0)) amount = 1000;
+  var pid = params.get("pid");                            // 앱 결제면 상품 id가 넘어와요.
+  var orderName = params.get("orderName") || "덕옥션 결제 테스트";
+  var appOrderId = params.get("paymentId") || ("duckauction-" + Date.now());
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[<>&"]/g, function (c) { return {"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c]; }); }
+
+  function guestKey(seed) {
+    var cleaned = String(seed || "").replace(/[^a-zA-Z0-9\-_=.@]/g, "");
+    var key = cleaned.length >= 2 ? cleaned : ("guest_" + Date.now());
+    return key.length > 50 ? key.slice(0, 50) : key;
+  }
+
+  function showResult(ok, detail) {
+    methodEl.style.display = "none";
+    agreementEl.style.display = "none";
+    actionsEl.innerHTML = '<button class="btn" onclick="location.href=\'pay.html\'">다시 결제 테스트</button>';
+    if (ok) {
+      view.innerHTML =
+        '<div class="result"><div class="ic">✅</div><h2>결제가 완료되었어요</h2>' +
+        '<p>결제키: ' + esc(detail) + '</p></div>';
+    } else {
+      view.innerHTML =
+        '<div class="result"><div class="ic">⚠️</div><h2>결제가 완료되지 않았어요</h2>' +
+        '<p>' + esc(detail) + '</p></div>';
+    }
+  }
+
+  // 결제위젯을 렌더링하고 [결제하기] 버튼을 붙여요.
+  //  - successUrl / failUrl 로 결제 결과를 돌려받아요(토스가 paymentKey/orderId/amount 또는 code/message를 붙여줌).
+  function renderWidget(successUrl, failUrl, headline, subline) {
+    view.innerHTML =
+      '<h1>' + esc(headline) + '</h1>' +
+      '<p class="sub">' + esc(subline) + '</p>';
+    try {
+      var paymentWidget = PaymentWidget(CLIENT_KEY, guestKey(appOrderId));
+      paymentWidget.renderPaymentMethods("#payment-method", { value: amount }, { variantKey: "DEFAULT" });
+      paymentWidget.renderAgreement("#agreement", { variantKey: "AGREEMENT" });
+      actionsEl.innerHTML = '<button class="btn" id="payBtn">' + amount.toLocaleString("ko-KR") + '원 결제하기</button>';
+      document.getElementById("payBtn").addEventListener("click", function () {
+        var btn = document.getElementById("payBtn");
+        btn.disabled = true; btn.textContent = "결제창을 여는 중…";
+        paymentWidget.requestPayment({
+          orderId: appOrderId,
+          orderName: orderName,
+          customerName: "덕옥션 회원",
+          successUrl: successUrl,
+          failUrl: failUrl
+        }).catch(function (e) {
+          btn.disabled = false; btn.textContent = amount.toLocaleString("ko-KR") + "원 결제하기";
+          showResult(false, (e && e.message) ? e.message : "결제창을 불러오지 못했어요.");
+        });
+      });
+    } catch (e) {
+      showResult(false, (e && e.message) ? e.message : "결제창을 불러오지 못했어요.");
+    }
+  }
+
+  // 진입 분기:
+  //  - demo=success/fail = 데모 결제 후 pay.html로 복귀 → 결과 표시.
+  //  - pid(상품 id)가 있으면 = 앱에서 넘어온 실제 결제 → 위젯 렌더 → 결제 후 앱(/?pmtDone=1)으로 복귀.
+  //  - 아무것도 없으면 = 데모 첫 진입 → 위젯 렌더(결제창 확인용).
+  if (demo === "success" && returnedKey) {
+    showResult(true, returnedKey);
+  } else if (demo === "fail") {
+    showResult(false, params.get("message") || "결제가 취소되었어요.");
+  } else if (returnedCode) {
+    showResult(false, params.get("message") || "결제가 취소되었어요.");
+  } else if (pid) {
+    // 앱 결제: 결제 결과를 앱으로 돌려줘요(토스가 successUrl에 paymentKey/orderId/amount 부착).
+    var back = location.origin + "/?pmtDone=1&pid=" + encodeURIComponent(pid);
+    renderWidget(back, back + "&pfail=1", "카드결제 (토스페이먼츠)",
+      "아래 결제하기를 누르면 토스 카드 결제창이 열립니다.");
+  } else {
+    // 데모: 결제 후 pay.html로 복귀해 결과를 표시해요.
+    renderWidget(location.origin + "/pay.html?demo=success", location.origin + "/pay.html?demo=fail",
+      "카드결제 (토스페이먼츠)", "아래 결제하기를 누르면 토스 카드 결제창이 열립니다. 결제창 정상 노출 확인용 화면입니다.");
+  }
+</script>
+</body>
+</html>

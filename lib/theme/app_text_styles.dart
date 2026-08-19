@@ -18,7 +18,7 @@ class AppTextStyles {
   static const bannerEyebrow = TextStyle(
     fontFamily: brandFont,
     fontSize: 16,
-    color: Color(0xFF334155),
+    color: Color(0xFF16305C),
     fontWeight: FontWeight.w700,
     letterSpacing: -0.2,
   );

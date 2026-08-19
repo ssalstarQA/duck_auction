@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Duck Auction</string>
+	<string>덕옥션</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>상품 사진을 촬영하기 위해 카메라 접근이 필요해요.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>프로필·상품 사진을 등록하기 위해 사진 보관함 접근이 필요해요.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>이미지를 저장하기 위해 사진 보관함 접근이 필요해요.</string>
 </dict>
 </plist>

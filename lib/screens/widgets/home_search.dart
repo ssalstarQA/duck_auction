@@ -232,8 +232,11 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
   }
 
   Future<void> _pickSearchImage() async {
+    // 카메라로 바로 찍기 / 갤러리에서 선택 중 고를 수 있어요.
+    final source = await pickImageSourceSheet(context);
+    if (source == null || !mounted) return;
     try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80, maxWidth: 1200);
+      final picked = await _picker.pickImage(source: source, imageQuality: 80, maxWidth: 1200);
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (!mounted) return;
@@ -319,8 +322,18 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
           final suggestions = _suggestions(allProducts);
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+            padding: EdgeInsets.zero,
             children: [
+              ResponsiveContentBounds(
+                padding: EdgeInsets.fromLTRB(
+                  context.pagePadding,
+                  12,
+                  context.pagePadding,
+                  28,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
               if (_query.trim().isNotEmpty && suggestions.isNotEmpty) ...[
                 Container(
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E7EB))),
@@ -396,11 +409,18 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                   child: const Column(children: [Icon(Icons.search_off, size: 42, color: Color(0xFFB8BBC2)), SizedBox(height: 10), Text('검색 결과가 없어요', style: TextStyle(fontWeight: FontWeight.w900)), SizedBox(height: 5), Text('초성, 경매명 일부, 태그 또는 판매자명으로 다시 검색해보세요.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF6B7280)))]),
                 )
               else
-                ...products.map((product) => ProductListTile(product: product)),
+                AuctionCardGrid(
+                  products: products,
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                ),
               if (_query.trim().isNotEmpty) ...[
                 const SizedBox(height: 18),
                 _SellerSearchResults(query: _query),
               ],
+                  ],
+                ),
+              ),
             ],
           );
         },

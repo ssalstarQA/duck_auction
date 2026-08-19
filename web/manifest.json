@@ -1,11 +1,11 @@
 {
-    "name": "duck_auction",
-    "short_name": "duck_auction",
+    "name": "덕옥션",
+    "short_name": "덕옥션",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#334155",
+    "description": "덕질의 가치를 경매하다 - 굿즈 경매 & 거래 플랫폼 덕옥션",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
