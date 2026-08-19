@@ -615,7 +615,10 @@ const portoneApiSecret = defineSecret('PORTONE_API_SECRET');
 //   firebase functions:secrets:set SMART_PARCEL_API_KEY
 // (스위트트래커에서 발급받은 키. 절대 클라이언트/깃허브 등에 노출 금지.)
 // 키가 없으면 자동감지는 동작하지 않고, 구매자 수동 '상품 받았어요'로 처리돼요.
-const smartParcelKey = defineSecret('SMART_PARCEL_API_KEY');
+// ※ 지금은 시크릿 미연결(키 없이 배포 가능). 재활성화하려면 아래 주석 해제 +
+//   checkShippingDeadlines의 secrets 연결 복구 + detectCarrierDelivery의 apiKey를
+//   smartParcelKey.value()로 되돌리고, firebase functions:secrets:set SMART_PARCEL_API_KEY.
+// const smartParcelKey = defineSecret('SMART_PARCEL_API_KEY');
 
 /** 결제 완료 후, 판매자에게 채팅으로 "배송 진행 + 송장(운송장) 번호 입력" 안내
  *  메시지를 자동으로 보냅니다. 메시지는 구매자(낙찰자) 명의로 채팅방에 남기고,
@@ -956,8 +959,7 @@ const AUTO_CONFIRM_AFTER_SHIP_DAYS = 3; // 배송확인 알림(또는 수령표�
 const DELIVERY_CHECK_AFTER_SHIP_DAYS = 7; // 발송(운송장 등록) 후 이 일수에 '상품 받으셨나요?' 첫 확인 알림
 const DELIVERY_RECHECK_INTERVAL_DAYS = 7; // [받지 못했어요] 이후 이 간격(일)으로 재확인 알림을 반복
 
-exports.checkShippingDeadlines = onSchedule(
-    {schedule: 'every 60 minutes', secrets: [smartParcelKey]}, async () => {
+exports.checkShippingDeadlines = onSchedule('every 60 minutes', async () => {
     const nowMs = Date.now();
 
     // (A) 결제완료(paid) 건: 배송 준비/운송장 기한 점검
@@ -1216,12 +1218,9 @@ async function detectCarrierDelivery(doc, nowMs) {
   // 스마트택배(스위트트래커) 폴링으로 배송완료를 자동 감지해요. API 키
   // (SMART_PARCEL_API_KEY)가 없으면 아무 것도 하지 않고, 구매자 수동 수령표시
   // (markDelivered)로 처리합니다.
-  let apiKey;
-  try {
-    apiKey = smartParcelKey.value();
-  } catch (_) {
-    apiKey = '';
-  }
+  // 시크릿 미연결 상태에선 env가 비어 있어 자동감지가 꺼져요(수동 수령표시로 처리).
+  // 재활성화 시 smartParcelKey.value()로 되돌리세요(파일 상단 안내 참고).
+  const apiKey = process.env.SMART_PARCEL_API_KEY || '';
   if (!apiKey) return;
 
   const p = doc.data();
