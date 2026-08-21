@@ -2,7 +2,7 @@ name: duck_auction
 description: "Duck Auction App"
 publish_to: 'none'
 
-version: 1.0.0+37
+version: 1.0.0+55
 
 environment:
   sdk: ">=3.8.0 <4.0.0"

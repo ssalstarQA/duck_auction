@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/login_screen.dart';
 import 'deep_link.dart';
@@ -27,9 +28,29 @@ class SessionGuard {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sub;
   bool _evicting = false;
 
+  static const String _prefsKey = 'device_session_id';
+
   static String _newSessionId() {
     final rnd = Random();
     return '${DateTime.now().microsecondsSinceEpoch}-${rnd.nextInt(1 << 31)}';
+  }
+
+  /// 이 기기의 '고정' 세션 id를 가져와요. 한 번 만들면 재설치 전까지 계속 같은
+  /// 값을 재사용하므로, 앱을 재시작해도 자기 자신을 로그아웃시키지 않아요.
+  /// (다른 '기기'에서 로그인할 때만 id가 달라져 중복 로그인이 감지됩니다.)
+  Future<String> _deviceSessionId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var id = prefs.getString(_prefsKey);
+      if (id == null || id.isEmpty) {
+        id = _newSessionId();
+        await prefs.setString(_prefsKey, id);
+      }
+      return id;
+    } catch (_) {
+      // prefs 접근 실패 시에도 이번 실행 동안은 하나의 값으로 고정해요.
+      return _sessionId ??= _newSessionId();
+    }
   }
 
   /// 로그인된 사용자에 대해 세션 감시를 시작해요. main()의 authStateChanges에서 호출.
@@ -39,7 +60,7 @@ class SessionGuard {
     await stop();
 
     _uid = uid;
-    final sessionId = _newSessionId();
+    final sessionId = await _deviceSessionId(); // 기기 고정 id(재시작해도 동일)
     _sessionId = sessionId;
 
     // 이 기기를 '현재 활성 세션'으로 등록해요(다른 기기 세션을 덮어씀).
@@ -61,8 +82,10 @@ class SessionGuard {
       final data = snap.data();
       if (data == null) return;
       final active = data['activeSessionId'] as String?;
-      // 다른 기기가 새 세션으로 덮어썼으면(내 세션과 다름) 이 기기는 로그아웃.
-      if (active != null && active.isNotEmpty && active != _sessionId) {
+      // 이 리스너가 만들어질 때의 '내 기기 id'(지역 변수 sessionId)와 비교해요.
+      // 다른 기기가 새로 로그인해 활성 세션을 덮어썼을 때만 로그아웃합니다.
+      // (start가 여러 번 불려 _sessionId가 바뀌어도 자기 자신을 안 쫓아내게 지역 변수 사용)
+      if (active != null && active.isNotEmpty && active != sessionId) {
         _evicting = true;
         unawaited(_evict());
       }

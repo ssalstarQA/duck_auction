@@ -2262,14 +2262,14 @@ Future<Uint8List?> cropPickedImage(XFile image, {CropAspectRatio? aspectRatio}) 
         toolbarTitle: '사진 편집',
         toolbarColor: const Color(0xFF334155),
         toolbarWidgetColor: Colors.white,
-        // 상태바 색을 지정해야 상단 툴바(✓/X)가 상태바(시간·배터리)와 겹치지 않고
-        // 그 아래에 정상적으로 배치돼요.
+        // 상태바 색을 지정해요. 상단 툴바(✓/X)가 상태바(시간·배터리)와 겹치는
+        // 문제는 네이티브 UCropTheme(불투명 상태바)로 함께 처리했어요.
         statusBarColor: const Color(0xFF1F2A44),
+        // 비율 고정을 넘겨받았을 때만 잠그고, 상품 사진은 자유 비율이에요.
         lockAspectRatio: aspectRatio != null,
-        // 하단 컨트롤바가 갤럭시 내비게이션 바에 가려 안 눌리는 문제가 있어
-        // 숨겨요. 확인/취소는 상단 툴바(✓/X)에서 하고, 크롭은 사진을 끌거나
-        // 확대해서 맞추면 돼요.
-        hideBottomControls: true,
+        // 하단 컨트롤(비율 선택·회전)을 보여줘요. 이게 있어야 사용자가 자유
+        // 비율을 골라 원하는 영역대로 크롭 프레임을 조절할 수 있어요.
+        hideBottomControls: false,
       ),
       IOSUiSettings(title: '사진 편집'),
     ],
@@ -2380,6 +2380,62 @@ Future<bool> showAddressEditSheet(BuildContext context) async {
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
+  /// 알림함에서 알림을 눌렀을 때, 알림 종류(type)에 맞는 화면으로 이동해요.
+  ///  - 유찰(auction_failed): 내 경매 관리(재등록/연장)
+  ///  - 채팅(chat_message): 해당 채팅방
+  ///  - 그 외(새 입찰·아웃비드·낙찰·결제 등 productId가 있는 알림): 경매 상세
+  Future<void> _openNotification(
+    BuildContext context, {
+    required String type,
+    required String productId,
+    required String roomId,
+  }) async {
+    final navigator = Navigator.of(context);
+
+    if (type == 'auction_failed') {
+      navigator.push(
+        MaterialPageRoute(builder: (_) => const MyAuctionManageScreen()),
+      );
+      return;
+    }
+
+    if (productId.isEmpty) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .where(FieldPath.documentId, isEqualTo: productId)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('연결된 경매를 찾을 수 없어요. 삭제되었을 수 있어요.')),
+          );
+        }
+        return;
+      }
+      final product = ProductItem.fromFirestore(snapshot.docs.first);
+      if (!context.mounted) return;
+      if (type == 'chat_message') {
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => SellerChatScreen(
+              product: product,
+              roomIdOverride: roomId.isEmpty ? null : roomId,
+            ),
+          ),
+        );
+      } else {
+        navigator.push(
+          MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product)),
+        );
+      }
+    } catch (_) {
+      // 이동 실패는 조용히 무시해요(네트워크 문제 등).
+    }
+  }
+
   Widget _empty(IconData icon, String title, String description) {
     return Center(
       child: Padding(
@@ -2437,6 +2493,12 @@ class NotificationsScreen extends StatelessWidget {
                     final data = docs[index].data();
                     final title = (data['title'] as String?)?.trim();
                     final body = (data['body'] as String?)?.trim();
+                    // 서버(sendPushToUser)는 라우팅 정보를 중첩 맵 data['data']에
+                    // {type, productId, roomId} 형태로 저장해요.
+                    final inner = (data['data'] as Map?) ?? const {};
+                    final type = (inner['type'] as String?) ?? '';
+                    final productId = (inner['productId'] as String?) ?? '';
+                    final roomId = (inner['roomId'] as String?) ?? '';
                     final ts = data['createdAt'];
                     String timeText = '';
                     if (ts is Timestamp) {
@@ -2444,7 +2506,12 @@ class NotificationsScreen extends StatelessWidget {
                       timeText = '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')} '
                           '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
                     }
+                    final tappable = type == 'auction_failed' || productId.isNotEmpty;
                     return ListTile(
+                      onTap: tappable
+                          ? () => _openNotification(context,
+                              type: type, productId: productId, roomId: roomId)
+                          : null,
                       leading: const CircleAvatar(
                         backgroundColor: Color(0xFFFFE4EC),
                         child: Icon(Icons.notifications_rounded, color: Color(0xFFFF5A8A), size: 20),
@@ -2460,6 +2527,9 @@ class NotificationsScreen extends StatelessWidget {
                             Padding(padding: const EdgeInsets.only(top: 4), child: Text(timeText, style: const TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8)))),
                         ],
                       ),
+                      trailing: tappable
+                          ? const Icon(Icons.chevron_right, size: 20, color: Color(0xFFCBD5E1))
+                          : null,
                     );
                   },
                 );

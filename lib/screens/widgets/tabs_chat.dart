@@ -3273,6 +3273,12 @@ class _SellerChatScreenState extends State<SellerChatScreen> {
             : fallback;
         final status = product.effectiveStatus;
 
+        // 거래완료(구매확정 후)면 판매자·구매자 각자에게 '후기 남기기'를 보여줘요.
+        // (각자 자기 채팅 화면이라 본인에게만 보이고, 이미 남겼으면 숨겨요.)
+        if (status == 'completed') {
+          return _reviewPromptBanner(context, isSeller, product);
+        }
+
         if (isSeller) {
           if (status == 'paid') {
             final prepared = product.shippingPreparedAt != null;
@@ -3327,6 +3333,43 @@ class _SellerChatScreenState extends State<SellerChatScreen> {
           );
         }
         return const SizedBox.shrink();
+      },
+    );
+  }
+
+  // 거래완료 후 '후기 남기기' 배너. 거래 당사자(판매자/낙찰자)에게만, 그리고
+  // 아직 이 거래에 후기를 안 남긴 경우에만 보여줘요. 누르면 후기 작성 화면으로.
+  Widget _reviewPromptBanner(BuildContext context, bool isSeller, ProductItem product) {
+    final uid = _currentUid;
+    final productId = product.id ?? '';
+    if (uid == null || productId.isEmpty) return const SizedBox.shrink();
+
+    // 거래 당사자만 후기를 남길 수 있어요(판매자 또는 최종 낙찰자).
+    final buyerUid = product.lastBidUserId ?? product.winnerId ?? '';
+    final isParty = isSeller || uid == buyerUid;
+    if (!isParty) return const SizedBox.shrink();
+
+    final targetLabel = isSeller
+        ? '구매자'
+        : (product.sellerName.isNotEmpty ? product.sellerName : '판매자');
+    final reviewId = ReviewService.reviewIdFor(productId, uid);
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('reviews').doc(reviewId).snapshots(),
+      builder: (context, snap) {
+        final already = snap.hasData && snap.data!.exists;
+        // 이미 후기를 남겼으면 배너를 숨겨요(중복 방지).
+        if (already) return const SizedBox.shrink();
+        return _ShipmentBanner(
+          icon: Icons.rate_review_outlined,
+          tone: _ShipTone.point,
+          title: '거래가 완료됐어요! 🎉',
+          subtitle: '$targetLabel님과의 거래는 어떠셨나요? 소중한 후기를 남겨주세요.',
+          buttonLabel: '후기 남기기',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ReviewWriteScreen(product: product)),
+          ),
+        );
       },
     );
   }
@@ -4623,6 +4666,54 @@ class _SellingListState extends State<_SellingList> {
   // 버튼이 1~2개로 달라도 이 높이로 통일해서 카드 높이가 카드마다 다르지 않게 해요.
   static const double _kSellFooterHeight = 76;
 
+  /// 카드 하단 '삭제' 버튼. 삭제 가능하면 빨간색으로 바로 삭제, 삭제 불가면
+  /// 비활성(회색)처럼 보이되 누르면 '왜 삭제할 수 없는지' 사유 팝업을 띄워요.
+  Widget _deleteButton(ProductItem product) {
+    final deletable = _deletable(product);
+    return _miniButton(
+      label: '삭제',
+      icon: Icons.delete_outline,
+      color: deletable ? const Color(0xFFDC2626) : const Color(0xFFCBD5E1),
+      onPressed: deletable
+          ? () => _deleteOne(product)
+          : () => _showDeleteBlockedNotice(product),
+    );
+  }
+
+  /// 삭제 불가 사유 안내 팝업.
+  void _showDeleteBlockedNotice(ProductItem product) {
+    final status = product.effectiveStatus;
+    String reason;
+    if (status == 'paid' ||
+        status == 'shipped' ||
+        status == 'delivered' ||
+        status == 'completed') {
+      reason = '결제·거래가 진행된 경매는 삭제할 수 없어요.\n'
+          '거래가 끝나거나 취소된 뒤에도 기록은 안전하게 보관돼요.';
+    } else if (DuckAuctionStore.parseCount(product.bids) > 0) {
+      final bidCount = DuckAuctionStore.parseCount(product.bids);
+      reason = '$bidCount건의 입찰이 진행됐어요.\n'
+          '입찰자 보호를 위해 삭제할 수 없어요.';
+    } else {
+      reason = '지금은 이 경매를 삭제할 수 없어요.';
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('삭제할 수 없어요',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(reason, style: const TextStyle(height: 1.5)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _sellFooter(ProductItem product, {required bool isFailed, required bool canEdit}) {
     final status = product.effectiveStatus;
     final Widget content;
@@ -4665,12 +4756,19 @@ class _SellingListState extends State<_SellingList> {
         ],
       );
     } else if (status == 'paid') {
-      // 결제 완료 후: 판매자는 운송장을 등록해요.
-      content = _miniButton(
-        label: '운송장 등록',
-        icon: Icons.local_shipping_outlined,
-        filled: true,
-        onPressed: () => _openShipmentRegister(product),
+      // 결제 완료 후: 판매자는 운송장을 등록해요. (삭제는 불가 — 사유 팝업)
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _miniButton(
+            label: '운송장 등록',
+            icon: Icons.local_shipping_outlined,
+            filled: true,
+            onPressed: () => _openShipmentRegister(product),
+          ),
+          const SizedBox(height: 6),
+          _deleteButton(product),
+        ],
       );
     } else if (status == 'shipped' || status == 'delivered' || status == 'completed') {
       content = Column(
@@ -4681,24 +4779,33 @@ class _SellingListState extends State<_SellingList> {
             icon: Icons.local_shipping_outlined,
             onPressed: () => _showShipmentInfoSheet(context, product),
           ),
-          if (status == 'shipped') ...[
-            const SizedBox(height: 6),
+          const SizedBox(height: 6),
+          // 배송중이면 '운송장 수정', 배송완료/거래완료면 '삭제'(불가 — 사유 팝업).
+          if (status == 'shipped')
             _miniButton(
               label: '운송장 수정',
               icon: Icons.edit_outlined,
               color: const Color(0xFF64748B),
               onPressed: () => _openShipmentRegister(product),
-            ),
-          ],
+            )
+          else
+            _deleteButton(product),
         ],
       );
     } else {
       // 수정 불가: '수정불가'를 누르면 상세 화면으로 이동하며 사유 팝업을 보여줘요.
-      content = _miniButton(
-        label: '수정불가',
-        icon: Icons.lock_outline,
-        color: const Color(0xFF9CA3AF),
-        onPressed: () => _navDetailEditBlocked(product),
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _miniButton(
+            label: '수정불가',
+            icon: Icons.lock_outline,
+            color: const Color(0xFF9CA3AF),
+            onPressed: () => _navDetailEditBlocked(product),
+          ),
+          const SizedBox(height: 6),
+          _deleteButton(product),
+        ],
       );
     }
     // 버튼이 1개든 2개든 푸터 높이를 고정해 카드 높이를 통일해요(내용은 위쪽 정렬).
@@ -4806,7 +4913,8 @@ class _SellingListState extends State<_SellingList> {
                   ResponsiveContentBounds(
                     // 태블릿에서도 가운데로 좁게 몰리지 않고 화면 폭을 꽉 채워요.
                     maxWidth: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                        16, 12, 16, 24 + MediaQuery.of(context).padding.bottom),
                     child: ResponsiveCardFlow(
                       spacing: 12,
                       runSpacing: 12,
@@ -4902,14 +5010,82 @@ class _MyAuctionMiniCard extends StatelessWidget {
   }
 }
 
-class _BiddingList extends StatelessWidget {
+class _BiddingList extends StatefulWidget {
   final String? userId;
 
   const _BiddingList({required this.userId});
 
   @override
+  State<_BiddingList> createState() => _BiddingListState();
+}
+
+class _BiddingListState extends State<_BiddingList> {
+  bool _selectionMode = false;
+  final Set<String> _selectedKeys = <String>{};
+
+  String _keyOf(ProductItem p) =>
+      (p.id != null && p.id!.isNotEmpty) ? p.id! : p.title;
+
+  // 끝난 입찰(진행 중이 아님)만 목록에서 정리할 수 있어요. 진행 중인 입찰은 남겨둬요.
+  bool _hideable(ProductItem p) => !p.isAuctionActive;
+
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selectedKeys.clear();
+    });
+  }
+
+  // 선택한 끝난 입찰을 '내 입찰 목록'에서만 숨겨요(users 문서에 기록).
+  // 경매/입찰 기록 자체는 삭제하지 않아요(구매자가 임의로 지울 수 없음).
+  Future<void> _deleteSelectedBids(List<ProductItem> visible) async {
+    final uid = widget.userId;
+    if (uid == null) return;
+    final targets = visible
+        .where((p) =>
+            _selectedKeys.contains(_keyOf(p)) &&
+            _hideable(p) &&
+            p.id != null &&
+            p.id!.isNotEmpty)
+        .toList();
+    if (targets.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('입찰 목록 정리',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(
+          '선택한 ${targets.length}개를 입찰 목록에서 뺄까요?\n'
+          '내 목록에서만 사라지고, 경매·입찰 기록에는 영향이 없어요.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dctx).pop(false),
+              child: const Text('취소')),
+          FilledButton(
+              onPressed: () => Navigator.of(dctx).pop(true),
+              child: Text('${targets.length}개 정리')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'hiddenBidProductIds':
+            FieldValue.arrayUnion(targets.map((p) => p.id!).toList()),
+      }, SetOptions(merge: true));
+    } catch (_) {}
+    if (!mounted) return;
+    _exitSelection();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${targets.length}개를 입찰 목록에서 정리했어요.')),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final uid = userId;
+    final uid = widget.userId;
     if (uid == null) {
       return const _MyEmptyList(
         icon: Icons.gavel_outlined,
@@ -4918,76 +5094,207 @@ class _BiddingList extends StatelessWidget {
       );
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('products')
-          .where('bidderIds', arrayContains: uid)
-          .orderBy('updatedAt', descending: true)
-          .limit(100)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Text(
-                '입찰한 경매를 불러오지 못했어요. 잠시 후 다시 시도해주세요.\n${snapshot.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700),
-              ),
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    // 먼저 내 문서(숨긴 입찰 목록)를 구독하고, 그 안에서 입찰 상품을 구독해요.
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      builder: (context, userSnap) {
+        final hidden = <String>{};
+        final ud = userSnap.data?.data();
+        final rawHidden = ud == null ? null : ud['hiddenBidProductIds'];
+        if (rawHidden is List) hidden.addAll(rawHidden.whereType<String>());
 
-        final products = snapshot.data!.docs.map((doc) => ProductItem.fromFirestore(doc)).toList();
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('products')
+              .where('bidderIds', arrayContains: uid)
+              .orderBy('updatedAt', descending: true)
+              .limit(100)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Text(
+                    '입찰한 경매를 불러오지 못했어요. 잠시 후 다시 시도해주세요.\n${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w700),
+                  ),
+                ),
+              );
+            }
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        if (products.isEmpty) {
-          return const _MyEmptyList(
-            icon: Icons.gavel_outlined,
-            title: '입찰한 경매가 없어요',
-            description: '관심 있는 경매에 입찰하거나 예약입찰을 걸면 여기에서 순위를 확인할 수 있어요.',
-          );
-        }
+            final all = snapshot.data!.docs
+                .map((doc) => ProductItem.fromFirestore(doc))
+                .toList();
+            // 내가 목록에서 정리(숨김)한 입찰은 빼요.
+            final products = all
+                .where((p) => p.id == null || !hidden.contains(p.id))
+                .toList();
 
-        return ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            ResponsiveContentBounds(
-              // 태블릿에서도 가운데로 좁게 몰리지 않고 화면 폭을 꽉 채워요.
-              maxWidth: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              child: ResponsiveCardFlow(
-                spacing: 12,
-                runSpacing: 12,
-                phoneColumns: 2,
-                tabletColumns: 3,
-                children: products.map((product) {
-                  final isFailed = product.effectiveStatus == 'failed';
-                  final isEnded = !product.isAuctionActive;
-                  final footer = _bidCardFooter(
-                    context,
-                    product: product,
-                    uid: uid,
-                    isEnded: isEnded,
-                    isFailed: isFailed,
-                  );
+            if (products.isEmpty) {
+              return const _MyEmptyList(
+                icon: Icons.gavel_outlined,
+                title: '입찰한 경매가 없어요',
+                description: '관심 있는 경매에 입찰하거나 예약입찰을 걸면 여기에서 순위를 확인할 수 있어요.',
+              );
+            }
 
-                  return _MyAuctionMiniCard(
-                    product: product,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product)),
-                    ),
-                    footer: footer,
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: _toolbar(products),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      ResponsiveContentBounds(
+                        maxWidth: double.infinity,
+                        padding: EdgeInsets.fromLTRB(
+                            16, 12, 16, 24 + MediaQuery.of(context).padding.bottom),
+                        child: ResponsiveCardFlow(
+                          spacing: 12,
+                          runSpacing: 12,
+                          phoneColumns: 2,
+                          tabletColumns: 3,
+                          children: products
+                              .map((product) => _bidCard(context, product, uid))
+                              .toList(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
+    );
+  }
+
+  // 판매 목록과 동일한 툴바: [선택]/[취소]·[전체 선택]·[삭제(N)] + '삭제 가능 N건'.
+  Widget _toolbar(List<ProductItem> products) {
+    final hideableKeys = products.where(_hideable).map(_keyOf).toSet();
+    final hideableCount = hideableKeys.length;
+    if (!_selectionMode) {
+      return Row(
+        children: [
+          OutlinedButton.icon(
+            onPressed: hideableCount == 0
+                ? null
+                : () => setState(() {
+                      _selectionMode = true;
+                      _selectedKeys.clear();
+                    }),
+            icon: const Icon(Icons.checklist_rounded, size: 18),
+            label: const Text('선택'),
+          ),
+          const Spacer(),
+          Text('삭제 가능 $hideableCount건',
+              style: const TextStyle(
+                  fontSize: 12.5,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w700)),
+        ],
+      );
+    }
+    final allSelected =
+        hideableCount > 0 && _selectedKeys.length >= hideableCount;
+    return Row(
+      children: [
+        TextButton(onPressed: _exitSelection, child: const Text('취소')),
+        TextButton(
+          onPressed: hideableCount == 0
+              ? null
+              : () => setState(() {
+                    if (allSelected) {
+                      _selectedKeys.clear();
+                    } else {
+                      _selectedKeys
+                        ..clear()
+                        ..addAll(hideableKeys);
+                    }
+                  }),
+          child: Text(allSelected ? '선택 해제' : '전체 선택'),
+        ),
+        const Spacer(),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFDC2626),
+            disabledBackgroundColor: const Color(0xFFE7BBBB),
+            foregroundColor: Colors.white,
+          ),
+          onPressed:
+              _selectedKeys.isEmpty ? null : () => _deleteSelectedBids(products),
+          icon: const Icon(Icons.delete_outline, size: 18),
+          label: Text('삭제 (${_selectedKeys.length})'),
+        ),
+      ],
+    );
+  }
+
+  Widget _bidCard(BuildContext context, ProductItem product, String uid) {
+    final isFailed = product.effectiveStatus == 'failed';
+    final isEnded = !product.isAuctionActive;
+    final footer = _bidCardFooter(
+      context,
+      product: product,
+      uid: uid,
+      isEnded: isEnded,
+      isFailed: isFailed,
+    );
+
+    if (_selectionMode) {
+      final key = _keyOf(product);
+      final selected = _selectedKeys.contains(key);
+      final hideable = _hideable(product);
+      return Opacity(
+        opacity: hideable ? 1.0 : 0.55,
+        child: _MyAuctionMiniCard(
+          product: product,
+          onTap: hideable
+              ? () => setState(() {
+                    if (selected) {
+                      _selectedKeys.remove(key);
+                    } else {
+                      _selectedKeys.add(key);
+                    }
+                  })
+              : null,
+          photoOverlay: Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              decoration:
+                  const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              child: hideable
+                  ? Icon(
+                      selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                      size: 26,
+                      color: selected
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF9CA3AF),
+                    )
+                  : const Icon(Icons.block, size: 24, color: Color(0xFFCBD5E1)),
+            ),
+          ),
+          footer: AbsorbPointer(child: footer),
+        ),
+      );
+    }
+
+    return _MyAuctionMiniCard(
+      product: product,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product)),
+      ),
+      footer: footer,
     );
   }
 
@@ -5013,6 +5320,7 @@ class _BiddingList extends StatelessWidget {
     String btnLabel;
     IconData btnIcon;
     bool btnEnabled = true;
+    String? blockedReason; // 비활성 버튼을 눌렀을 때 보여줄 '왜 비활성인지' 사유
     VoidCallback? onPressed;
 
     const green = Color(0xFF15803D), greenBg = Color(0xFFF0FDF4);
@@ -5033,6 +5341,7 @@ class _BiddingList extends StatelessWidget {
         btnLabel = '결제취소됨';
         btnIcon = Icons.cancel_outlined;
         btnEnabled = false;
+        blockedReason = '이 거래는 결제가 취소됐어요.\n더 이상 진행할 수 없는 종료된 거래예요.';
       } else if (status == 'delivered') {
         // 배송완료 → 카드에서 바로 구매확정할 수 있어요(상세로 안 들어가도 됨).
         btnLabel = '구매확정';
@@ -5084,6 +5393,8 @@ class _BiddingList extends StatelessWidget {
       btnLabel = '유찰됨';
       btnIcon = Icons.block_outlined;
       btnEnabled = false;
+      blockedReason = '입찰자가 없거나 최소 조건에 못 미쳐 유찰(낙찰자 없이 종료)된 경매예요.\n'
+          '이미 종료돼 더 이상 입찰할 수 없어요.';
     } else {
       // 마감됐는데 내가 낙찰자가 아님(순위 밀림 + 마감). 눌러도 되고, 상세로
       // 이동하면 '마감돼서 상위입찰 불가' 사유 팝업을 보여줘요.
@@ -5119,12 +5430,18 @@ class _BiddingList extends StatelessWidget {
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               padding: EdgeInsets.zero,
-              foregroundColor: const Color(0xFF16305C),
+              // 비활성 상태는 회색으로 보이게 하되(비활성처럼), 사유 팝업을 위해 눌리긴 해요.
+              foregroundColor: btnEnabled ? const Color(0xFF16305C) : const Color(0xFF94A3B8),
               disabledForegroundColor: const Color(0xFF94A3B8),
               side: BorderSide(color: btnEnabled ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: btnEnabled ? onPressed : null,
+            // 비활성 상태여도 누르면 '왜 비활성인지' 사유 팝업을 띄워요(상세로 안 감).
+            onPressed: btnEnabled
+                ? onPressed
+                : (blockedReason != null
+                    ? () => _showBidBlockedNotice(context, btnLabel, blockedReason!)
+                    : null),
             icon: Icon(btnIcon, size: 15),
             label: FittedBox(
               fit: BoxFit.scaleDown,
@@ -5133,6 +5450,25 @@ class _BiddingList extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  /// 비활성(유찰됨·결제취소됨 등) 버튼을 눌렀을 때, 상세로 가지 않고 왜 비활성인지
+  /// 사유를 팝업으로 안내해요.
+  void _showBidBlockedNotice(BuildContext context, String label, String reason) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(reason, style: const TextStyle(height: 1.5)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
     );
   }
 

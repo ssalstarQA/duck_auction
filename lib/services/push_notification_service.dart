@@ -263,6 +263,18 @@ class PushNotificationService {
   /// 해당 상품 상세 화면 또는 채팅방으로 바로 이동시킵니다.
   Future<void> _handleNotificationTap(RemoteMessage message) async {
     final data = message.data;
+    final navigator = DeepLink.navigatorKey.currentState;
+    if (navigator == null) return;
+
+    // 유찰 알림(입찰자 없음 / 결제 기한 만료)은 판매자를 '내 경매 관리'로 보내
+    // 유찰된 경매를 바로 '새로 등록' 또는 '경매 연장' 하게 해줍니다.
+    if (data['type'] == 'auction_failed') {
+      navigator.push(
+        MaterialPageRoute(builder: (_) => const MyAuctionManageScreen()),
+      );
+      return;
+    }
+
     final productId = data['productId'];
     if (productId == null || (productId as String).isEmpty) return;
 
@@ -274,9 +286,6 @@ class PushNotificationService {
           .get();
       if (snapshot.docs.isEmpty) return;
       final product = ProductItem.fromFirestore(snapshot.docs.first);
-
-      final navigator = DeepLink.navigatorKey.currentState;
-      if (navigator == null) return;
 
       if (data['type'] == 'chat_message') {
         final roomId = data['roomId'];

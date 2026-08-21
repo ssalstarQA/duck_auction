@@ -329,6 +329,9 @@ async function sendPushToUser(uid, {title, body, data = {}}) {
         data: data || {},
         read: false,
         createdAt: FieldValue.serverTimestamp(),
+        // 30일 뒤 자동 삭제(Firestore TTL: expireAt 필드 정책). 사용자가 임의로
+        // 지우는 기능은 두지 않고, 이 만료 시각으로만 자동 정리돼요.
+        expireAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
     } catch (e2) {
       console.error('[push] 알림함 저장 실패', e2);
@@ -1918,16 +1921,26 @@ async function recOpenAiEstimate({title, tags, category, condition, imageUrls, a
   if (!apiKey) return {price: null};
   const tagLine = (tags || []).join(', ');
   const prompt =
-    '당신은 한국 애니메이션·캐릭터 굿즈 중고 거래 시세 분석가입니다.\n' +
-    '아래 상품이 지금 한국에서 중고로 거래되는 평균 시세를 웹에서 검색해 추정하세요.\n' +
-    '번개장터·중고나라·헬로마켓·트위터 나눔/양도 글 등 실제 거래가를 참고하고,\n' +
-    '정가(신품)만 있으면 상태를 반영해 중고가로 보정하세요.\n' +
+    '당신은 한국 애니메이션·캐릭터 굿즈(특히 치이카와 등 인기 캐릭터) 리셀·중고 시세 전문가입니다.\n' +
+    '아래 정보(사진/상품명/카테고리/태그/상태) 중 "주어진 것"만으로, 이 "특정 상품"이 지금 한국에서\n' +
+    '실제 거래되는 시세를 웹에서 검색해 추정하세요.\n' +
+    '· 상품명·태그의 단어를 그대로 검색어로 쓰고, 필요하면 원어(일본어) 이름으로도 검색하세요.\n' +
+    '  (예: "갸루 우사기 마스코트" → "치이카와 갸루 우사기", "ちいかわ ギャル うさぎ" 등)\n' +
+    '· 사진이 있으면 사진 속 정확한 상품을 인식해 그 상품을 검색하세요.\n' +
+    '· 번개장터·중고나라·당근·트위터 양도 글의 "현재 판매중 호가(리셀가)"를 최우선으로 보세요.\n' +
+    '· ★매우 중요: 상품명이 특정 변형/한정/인기 상품을 가리키면 그 "특정 상품"의 시세를 찾으세요.\n' +
+    '  절대 일반형("우사기 인형" 같은 기본 상품) 평균으로 대체해 낮게 잡지 마세요.\n' +
+    '· ★인기·품절·한정판 캐릭터 굿즈(예: 치이카와 인기 마스코트)는 리셀가가 정가의 2~3배 이상으로\n' +
+    '  형성되는 경우가 흔합니다. 이런 상품을 기본형 시세로 낮추면 크게 틀립니다. 실제 리셀 호가를\n' +
+    '  반영해 현실적으로(높게 형성돼 있으면 높게) 추정하세요.\n' +
+    '· 매물 가격 편차가 크면 명백히 다른(더 싼 딴 상품) 매물은 빼고, 같은 상품 매물들의 중앙값을 쓰세요.\n' +
+    '· 정확히 일치하는 매물이 없을 때만 같은 종류로 근사하되, 그때도 인기도를 감안하세요.\n' +
     `- 상품명: ${title || '(없음)'}\n` +
     `- 카테고리: ${category || '(없음)'}\n` +
     `- 태그: ${tagLine || '(없음)'}\n` +
     `- 상태: ${condition || '(없음)'}\n` +
-    '반드시 아래 JSON 한 줄만 출력하세요(설명 문장 금지):\n' +
-    '{"price_krw": <정수 원>, "low": <정수 원>, "high": <정수 원>, "basis": "<한 줄 근거>"}';
+    '반드시 아래 JSON 한 줄만 출력하세요(설명 금지). 도저히 추정 불가할 때만 price_krw 를 0 으로.\n' +
+    '{"price_krw": <정수 원, 현재 리셀 시세>, "low": <정수 원>, "high": <정수 원>, "basis": "<한 줄 근거>"}';
 
   const content = [{type: 'input_text', text: prompt}];
   for (const u of (imageUrls || []).slice(0, 2)) {
@@ -1936,61 +1949,79 @@ async function recOpenAiEstimate({title, tags, category, condition, imageUrls, a
       content.push({type: 'input_image', image_url: u, detail: 'low'});
     }
   }
-  try {
-    const res = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        tools: [{type: 'web_search_preview'}],
-        input: [{role: 'user', content}],
-      }),
-    });
-    if (!res.ok) {
-      const errTxt = await res.text().catch(() => '');
-      console.error('[rec] OpenAI 응답 오류', res.status, errTxt.slice(0, 300));
-      return {price: null};
-    }
-    const json = await res.json();
-    // Responses API: output_text 헬퍼가 있으면 그걸, 없으면 output 배열을 훑어요.
-    let text = typeof json.output_text === 'string' ? json.output_text : '';
-    if (!text && Array.isArray(json.output)) {
-      for (const item of json.output) {
-        for (const c of (item.content || [])) {
-          if (typeof c.text === 'string') text += c.text;
+
+  // OpenAI Responses API를 한 번 호출해 본문에서 price_krw(>=1000)를 뽑아요.
+  // useWebSearch=true면 웹검색 도구를 붙이고, false면 모델 자체 지식으로 추정해요.
+  async function callOnce(useWebSearch) {
+    try {
+      // 시세 추정 정확도를 위해 gpt-4o 사용(mini는 니치 굿즈를 저평가하는 경향).
+      const body = {model: 'gpt-4o', input: [{role: 'user', content}]};
+      if (useWebSearch) body.tools = [{type: 'web_search_preview'}];
+      const res = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errTxt = await res.text().catch(() => '');
+        console.error('[rec] OpenAI 응답 오류',
+            useWebSearch ? '(웹검색)' : '(기본)', res.status, errTxt.slice(0, 300));
+        return {price: null};
+      }
+      const json = await res.json();
+      // Responses API: output_text 헬퍼가 있으면 그걸, 없으면 output 배열을 훑어요.
+      let text = typeof json.output_text === 'string' ? json.output_text : '';
+      if (!text && Array.isArray(json.output)) {
+        for (const item of json.output) {
+          for (const c of (item.content || [])) {
+            if (typeof c.text === 'string') text += c.text;
+          }
         }
       }
+      // 본문에서 JSON 객체를 추출해 파싱하고 price_krw만 가격으로 인정해요.
+      const m = text.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          const obj = JSON.parse(m[0]);
+          const price = Number(obj.price_krw);
+          if (Number.isFinite(price) && price >= 1000) {
+            return {price, low: Number(obj.low) || null, high: Number(obj.high) || null, basis: obj.basis || null};
+          }
+        } catch (_) { /* JSON 파싱 실패 → 값 없음 처리 */ }
+      }
+      return {price: null};
+    } catch (e) {
+      console.error('[rec] OpenAI 호출 실패',
+          useWebSearch ? '(웹검색)' : '(기본)', e);
+      return {price: null};
     }
-    // 본문에서 JSON 객체를 추출해 파싱해요(모델이 앞뒤에 군더더기를 붙여도 견뎌요).
-    // 반드시 price_krw JSON 필드만 가격으로 인정해요. 예전엔 JSON이 없을 때
-    // 본문 속 아무 숫자(예: "2025년")나 가격으로 오인하는 버그가 있어서 제거했어요.
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        const obj = JSON.parse(m[0]);
-        const price = Number(obj.price_krw);
-        // 굿즈 시세로 말이 되는 하한(1,000원) 이상만 채택해요.
-        if (Number.isFinite(price) && price >= 1000) {
-          return {price, low: Number(obj.low) || null, high: Number(obj.high) || null, basis: obj.basis || null};
-        }
-      } catch (_) { /* JSON 파싱 실패 → 값 없음 처리 */ }
-    }
-    return {price: null};
-  } catch (e) {
-    console.error('[rec] OpenAI 호출 실패', e);
-    return {price: null};
   }
+
+  // 1) 웹검색으로 실제 시세를 찾아보고, 2) 실패하면(도구 미지원·검색 불가·오류 등)
+  //    모델 자체 지식으로라도 추정치를 내도록 폴백해요. → 제목·태그만으로도 값이 나와요.
+  let r = await callOnce(true);
+  if (!(r.price > 0)) r = await callOnce(false);
+  return r;
 }
 
 exports.recommendPrice = onCall(
     {
       timeoutSeconds: 120,
       memory: '512MiB',
+      // 외부 시세 소스 키를 런타임 환경변수(process.env)로 주입해요.
+      // firebase functions:secrets:set 으로 등록한 값이 여기 이름으로 들어와요.
+      // 네이버 키(NAVER_CLIENT_ID/SECRET)는 선택 사항이라 여기서 선언하지 않아요.
+      // (선언하면 secret이 없을 때 배포가 막혀요. 코드는 키가 없으면 네이버를
+      //  자동으로 건너뛰어요.) 나중에 네이버를 쓰려면 secret 등록 후 여기에 추가.
+      secrets: ['OPENAI_API_KEY'],
     },
     async (request) => {
+      // [진단] 인증/입력 도착 확인용 로그 — 원인 파악 후 제거 예정.
+      console.log('[rec] called uid=' +
+        (request.auth && request.auth.uid ? request.auth.uid : 'NO-AUTH'));
       if (!request.auth || !request.auth.uid) {
         throw new HttpsError('unauthenticated', '로그인 후 이용할 수 있어요.');
       }
@@ -2005,22 +2036,27 @@ exports.recommendPrice = onCall(
         ...(Array.isArray(data.imageDataUrls) ? data.imageDataUrls : []),
       ].filter((u) => typeof u === 'string' && u.length > 0);
 
-      if (!title && tags.length === 0) {
-        throw new HttpsError('invalid-argument', '제목이나 태그를 먼저 입력해주세요.');
+      if (!title && tags.length === 0 && imageUrls.length === 0) {
+        throw new HttpsError('invalid-argument', '사진, 제목, 태그 중 최소 하나는 입력해주세요.');
       }
+      // 사진·제목·태그 중 하나만 있어도 추천해요. 텍스트가 전혀 없으면(사진만)
+      // 캐시 키가 서로 겹칠 수 있어 캐시를 건너뛰고 매번 새로 분석해요.
+      const hasText = !!title || tags.length > 0;
 
       // 캐시 확인: 같은 조건(제목·태그·카테고리·상태)이면 외부 API 호출 없이 재사용해요.
       const cacheKey = recCacheKey({title, tags, category, condition});
       const cacheRef = db.collection('recommendCache').doc(cacheKey);
-      try {
-        const cached = await cacheRef.get();
-        const cd = cached.exists ? cached.data() : null;
-        if (cd && cd.success && cd.expiresAt && typeof cd.expiresAt.toMillis === 'function' &&
-            cd.expiresAt.toMillis() > Date.now() && cd.payload) {
-          return {...cd.payload, method: 'cache'};
+      if (hasText) {
+        try {
+          const cached = await cacheRef.get();
+          const cd = cached.exists ? cached.data() : null;
+          if (cd && cd.success && cd.expiresAt && typeof cd.expiresAt.toMillis === 'function' &&
+              cd.expiresAt.toMillis() > Date.now() && cd.payload) {
+            return {...cd.payload, method: 'cache'};
+          }
+        } catch (e) {
+          console.error('[rec] 캐시 조회 실패', e);
         }
-      } catch (e) {
-        console.error('[rec] 캐시 조회 실패', e);
       }
 
       // uid당 시간당 호출 상한 — 캐시 미스인 '비싼 경로'에만 적용해요(남용/스크립트 방지).
@@ -2047,6 +2083,13 @@ exports.recommendPrice = onCall(
       if (naver.average && naver.average > 0) webParts.push(naver.average);
       if (openai.price && openai.price > 0) webParts.push(openai.price);
       const webPrice = webParts.length ? Math.round(webParts.reduce((s, n) => s + n, 0) / webParts.length) : null;
+
+      // [진단] 각 소스 결과 로그 — 원인 파악 후 제거 예정.
+      console.log('[rec] sources title="' + title + '" tags=' + tags.length +
+        ' img=' + imageUrls.length +
+        ' | internal=' + internal.count + '/' + (internal.median || 0) +
+        ' naver=' + (naver.average || 0) + '(' + naver.count + ')' +
+        ' openai=' + (openai.price || 0) + ' web=' + (webPrice || 0));
 
       const internalStrong = internal.median && internal.count >= REC_MIN_INTERNAL;
       let finalPrice = null;
@@ -2089,16 +2132,19 @@ exports.recommendPrice = onCall(
         // 사용자에게 보여줄 '분석에 쓴 표본 수'(내부 + 네이버 아이템 수).
         sampleCount: (internal.count || 0) + (naver.count || 0),
       };
-      // 성공 결과만 캐시에 저장(TTL 동안 같은 조건 재사용).
-      try {
-        await cacheRef.set({
-          success: true,
-          payload,
-          expiresAt: Timestamp.fromMillis(Date.now() + REC_CACHE_TTL_MS),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        console.error('[rec] 캐시 저장 실패', e);
+      // 성공 결과만 캐시에 저장(TTL 동안 같은 조건 재사용). 사진만 있는 요청은
+      // 캐시 키가 겹칠 수 있어 저장하지 않아요.
+      if (hasText) {
+        try {
+          await cacheRef.set({
+            success: true,
+            payload,
+            expiresAt: Timestamp.fromMillis(Date.now() + REC_CACHE_TTL_MS),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          console.error('[rec] 캐시 저장 실패', e);
+        }
       }
       return payload;
     });

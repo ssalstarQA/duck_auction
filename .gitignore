@@ -76,3 +76,4 @@ npm-debug.log*
 # ---- 기타 ----
 *.log
 coverage/
+okey.txt

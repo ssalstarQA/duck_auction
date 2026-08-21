@@ -1650,8 +1650,9 @@ class _AiRecommendationCard extends StatelessWidget {
           Text(diffText, style: const TextStyle(color: Color(0xFF9F1239), fontWeight: FontWeight.w800, height: 1.35)),
           const SizedBox(height: 8),
           const Text(
-            '현재는 카테고리·상품 상태·입찰 데이터를 기반으로 안내하며, 거래 데이터가 쌓이면 추천 정확도를 높일 예정이에요.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF9F1239), fontWeight: FontWeight.w600, height: 1.35),
+            '웹 시세와 실제 거래 데이터를 종합해 계산한 추천 시작가예요. '
+            '상품의 현재 인기도나 한정판·품절 프리미엄가에 따라 실제 낙찰가는 달라질 수 있으니 참고용으로만 확인해 주세요.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF9F1239), fontWeight: FontWeight.w600, height: 1.4),
           ),
         ],
       ),

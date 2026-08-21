@@ -1914,8 +1914,10 @@ class _NormalAuctionFields extends StatelessWidget {
               const SizedBox(height: 4),
               if (useAiPrice && aiComputed) ...[
                 Text(
-                  '웹 시세와 실제 거래 $aiSampleCount건을 종합해 분석한 추천 시작가예요.',
-                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF777777), height: 1.4),
+                  '웹 시세와 실제 거래 $aiSampleCount건을 종합 분석해 뽑은 추천 시작가예요. '
+                  '다만 상품의 현재 인기도나 한정판·품절로 인한 프리미엄가까지 실시간으로 반영하기는 어려워요. '
+                  '실제 시세는 상태·구성품에 따라 달라질 수 있으니 참고용으로만 활용해 주세요.',
+                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF777777), height: 1.45),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -1946,7 +1948,8 @@ class _NormalAuctionFields extends StatelessWidget {
                 ),
               ] else ...[
                 const Text(
-                  '토글을 켜면 사진·제목·태그로 웹 전체 시세와 실제 거래 데이터를 함께 분석해 추천 시작가를 계산해 드려요.',
+                  '토글을 켜면 사진·제목·태그로 웹 전체 시세와 실제 거래 데이터를 함께 분석해 추천 시작가를 계산해 드려요. '
+                  '인기도·프리미엄가가 반영된 참고용 가격이니 최종 시작가는 직접 확인 후 정해 주세요.',
                   style: TextStyle(fontSize: 12.5, color: Color(0xFF777777), height: 1.45),
                 ),
               ],

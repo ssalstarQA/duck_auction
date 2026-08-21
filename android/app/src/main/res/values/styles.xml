@@ -15,4 +15,16 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <!-- 사진 크롭(uCrop) 화면 전용 테마. 상태바를 불투명(어두운 색)으로 그려서
+         상단 툴바(✓/X)가 상태바(시간·와이파이)와 겹치지 않고 그 아래에 놓이게 해요. -->
+    <style name="UCropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:statusBarColor">#FF1F2A44</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <!-- Android 15(타깃 SDK 35+)의 edge-to-edge 강제를 이 화면에서만 꺼요.
+             안 그러면 크롭 화면이 상태바 아래까지 그려져서 상단 툴바(✓/X)가
+             상태바(시간·와이파이)와 겹치고, 크롭 영역 좌표도 어긋나요.
+             (API 35 미만에서는 이 속성이 무시돼 안전해요.) -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
 </resources>

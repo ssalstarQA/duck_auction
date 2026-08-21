@@ -164,7 +164,7 @@ class ProductCollectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 찜 목록은 카테고리 필터 + '종료 삭제'(끝난 찜 정리)를 갖춘 전용 화면을 써요.
+    // 찜 목록은 카테고리(+쿠지 등급) 필터 + 선택 삭제/하트 해제를 갖춘 전용 화면을 써요.
     if (mode == ProductCollectionMode.favorites) {
       return const FavoritesCollectionScreen();
     }
@@ -189,28 +189,13 @@ class ProductCollectionScreen extends StatelessWidget {
             valueListenable: DuckAuctionStore.favoriteProductIds,
             builder: (context, favorites, __) {
               final filteredProducts = _filterProducts(products, favorites);
-
-              if (filteredProducts.isEmpty) {
-                final message = mode == ProductCollectionMode.favorites
-                    ? '아직 찜한 상품이 없어요.'
-                    : '표시할 상품이 없어요.';
-                return Center(
-                  child: Text(
-                    message,
-                    style: const TextStyle(
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                itemCount: filteredProducts.length,
-                itemBuilder: (context, index) {
-                  return ProductListTile(product: filteredProducts[index]);
-                },
+              // 마감임박 화면과 동일하게 카테고리 + 정렬 필터를 갖춘 목록으로 통일해요.
+              return _FilteredAuctionListView(
+                products: filteredProducts,
+                initialSort: mode == ProductCollectionMode.popular
+                    ? _AuctionSort.popular
+                    : _AuctionSort.latest,
+                emptyText: '표시할 상품이 없어요.',
               );
             },
           );
@@ -494,7 +479,7 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
                       children: [
                         Text(entry.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
                         const SizedBox(height: 3),
-                        Text(entry.description, style: const TextStyle(fontSize: 12.5, height: 1.3, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                        Text(_wordSafeBreak(entry.description), style: const TextStyle(fontSize: 12.5, height: 1.3, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -730,7 +715,10 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
                       border: Border(right: BorderSide(color: Color(0xFFE5E7EB))),
                     ),
                     child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      // 하단 시스템 내비게이션 바(갤럭시 등)에 마지막 '설정' 메뉴가
+                      // 가려지지 않도록 안전영역 높이만큼 하단 여백을 더해요.
+                      padding: EdgeInsets.fromLTRB(
+                          0, 6, 0, 6 + MediaQuery.of(context).padding.bottom),
                       children: [
                         _sideButton(label: '전체 메뉴', icon: Icons.apps_rounded, category: _AllMenuCategory.all),
                         _sideButton(label: '즐겨찾기', icon: Icons.star_rounded, category: _AllMenuCategory.favorites),
@@ -749,7 +737,8 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
                     duration: const Duration(milliseconds: 180),
                     child: ListView(
                       key: ValueKey(_selected),
-                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+                      padding: EdgeInsets.fromLTRB(
+                          16, 18, 16, 28 + MediaQuery.of(context).padding.bottom),
                       children: [
                         Text(_detailTitle, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                         const SizedBox(height: 12),
@@ -845,6 +834,16 @@ class _AllMenuCategoryButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 한글 설명이 어절(단어) 중간에서 줄바꿈되지 않도록, 각 어절 내부 글자를
+/// word-joiner(U+2060)로 묶어 공백에서만 줄바꿈되게 만들어요.
+/// (예: "…확률의 쿠지 상\n품" → "…확률의\n쿠지 상품")
+String _wordSafeBreak(String text) {
+  return text
+      .split(' ')
+      .map((w) => w.isEmpty ? w : w.split('').join('\u{2060}'))
+      .join(' ');
 }
 
 class _AllMenuEntry {
@@ -988,7 +987,8 @@ class _CategoryAuctionListScreenState extends State<CategoryAuctionListScreen> {
                       )
                     : _isGridView
                         ? GridView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                            padding: EdgeInsets.fromLTRB(16, 12, 16,
+                                24 + MediaQuery.of(context).padding.bottom),
                             // ProductCard는 사진(128) + 글자 영역이 폭과
                             // 상관없이 항상 거의 같은 높이라, 폭 비율로
                             // 셀 높이를 정하는 childAspectRatio를 쓰면 화면이
@@ -1011,7 +1011,8 @@ class _CategoryAuctionListScreenState extends State<CategoryAuctionListScreen> {
                             itemBuilder: (context, index) => ProductCard(product: filtered[index], width: null),
                           )
                         : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                            padding: EdgeInsets.fromLTRB(16, 12, 16,
+                                24 + MediaQuery.of(context).padding.bottom),
                             itemCount: filtered.length,
                             itemBuilder: (context, index) => ProductListTile(product: filtered[index]),
                           ),
@@ -1326,7 +1327,12 @@ class _HorizontalProductListState extends State<_HorizontalProductList> {
               padding: const EdgeInsets.only(right: 26),
               itemCount: widget.products.length,
               separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, index) => ProductCard(product: widget.products[index]),
+              // 카드가 고정 높이를 꽉 채우며 아래에 빈 공간이 생기지 않도록,
+              // 내용 높이만큼만 차지하게 상단 정렬로 감싸요.
+              itemBuilder: (context, index) => Align(
+                alignment: Alignment.topCenter,
+                child: ProductCard(product: widget.products[index]),
+              ),
             ),
           ),
           if (_canScrollLeft)
@@ -1472,6 +1478,7 @@ class ProductCard extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
                 height: 128,
@@ -1734,8 +1741,9 @@ class AuctionCardGrid extends StatelessWidget {
   }
 }
 
-/// 찜 목록 화면 — 상단에 [카테고리 필터]와 우측 ["종료 삭제"](마감·유찰·낙찰돼 끝난
-/// 찜을 한 번에 정리) 버튼을 갖춘 찜 전용 화면이에요.
+/// 찜 목록 화면 — 상단에 [카테고리 필터](쿠지 선택 시 상위상/하위상 등급 필터 추가)와
+/// 우측 [선택] 버튼(선택 모드에서 여러 개를 골라 한 번에 찜 해제)을 갖춘 찜 전용 화면이에요.
+/// 각 카드의 하트를 눌러 바로 찜을 해제할 수도 있어요.
 /// ProductCollectionScreen의 favorites 모드가 이 화면을 사용합니다.
 class FavoritesCollectionScreen extends StatefulWidget {
   const FavoritesCollectionScreen({super.key});
@@ -1747,7 +1755,11 @@ class FavoritesCollectionScreen extends StatefulWidget {
 
 class _FavoritesCollectionScreenState extends State<FavoritesCollectionScreen> {
   static const String _allCategory = '전체';
+  static const String _allGrade = '전체';
   String _category = _allCategory;
+  String _kujiGrade = _allGrade; // 쿠지 하위 등급 필터(전체/상위상/하위상)
+  bool _selectionMode = false;
+  final Set<String> _selectedKeys = <String>{};
 
   @override
   void initState() {
@@ -1757,71 +1769,82 @@ class _FavoritesCollectionScreenState extends State<FavoritesCollectionScreen> {
 
   List<String> get _categoryOptions =>
       <String>[_allCategory, ...AppCategories.names];
+  List<String> get _gradeOptions =>
+      <String>[_allGrade, ...AppCategories.kujiGrades];
 
-  // 찜 여부: 저장된 키는 상품 id(없으면 제목)로 매칭해요(_filterProducts와 동일 규칙).
+  // 찜 저장 키: 상품 id(없으면 제목).
+  String _keyOf(ProductItem p) =>
+      (p.id != null && p.id!.isNotEmpty) ? p.id! : p.title;
+
   bool _isFavorited(ProductItem p, Set<String> favorites) {
     final id = p.id;
     if (id != null && id.isNotEmpty) return favorites.contains(id);
     return favorites.contains(p.title);
   }
 
-  // 끝난 찜: 진행 중(active)이 아니면 마감·유찰·낙찰로 종료된 것으로 봐요.
-  bool _isEnded(ProductItem p) => p.effectiveStatus != 'active';
-
-  Future<void> _clearEnded(List<ProductItem> favProducts) async {
-    final ended = favProducts.where(_isEnded).toList();
-    if (ended.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('정리할 종료된 찜이 없어요.')),
-      );
-      return;
+  // 카테고리 + (쿠지일 때) 등급 필터를 적용해요.
+  List<ProductItem> _applyFilters(List<ProductItem> favProducts) {
+    var list = _category == _allCategory
+        ? favProducts
+        : favProducts.where((p) => p.category == _category).toList();
+    if (_category == AppCategories.kuji && _kujiGrade != _allGrade) {
+      list = list.where((p) => p.kujiGrade == _kujiGrade).toList();
     }
-    final endedCount = ended.where((p) => p.effectiveStatus == 'ended').length;
-    final failedCount = ended.where((p) => p.effectiveStatus == 'failed').length;
-    final soldCount = ended.where((p) => p.effectiveStatus == 'sold').length;
-    final lines = <String>[
-      if (endedCount > 0) '· 마감된 경매 $endedCount개',
-      if (failedCount > 0) '· 유찰된 경매 $failedCount개',
-      if (soldCount > 0) '· 낙찰된 경매 $soldCount개',
-    ].join('\n');
+    return list;
+  }
 
-    final confirmed = await showDialog<bool>(
+  void _exitSelection() {
+    setState(() {
+      _selectionMode = false;
+      _selectedKeys.clear();
+    });
+  }
+
+  // 선택한 찜을 한 번에 해제해요(선택 후 삭제).
+  Future<void> _deleteSelected(List<ProductItem> visible) async {
+    final targets =
+        visible.where((p) => _selectedKeys.contains(_keyOf(p))).toList();
+    if (targets.isEmpty) return;
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('종료된 찜 정리',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text('찜 해제', style: TextStyle(fontWeight: FontWeight.w900)),
         content: Text(
-          '끝난 경매 ${ended.length}개를 찜 목록에서 정리할게요.\n\n$lines\n\n'
-          '찜 목록에서만 사라지고, 경매나 거래 자체에는 영향을 주지 않아요.',
+          '선택한 ${targets.length}개를 찜 목록에서 뺄까요?\n'
+          '찜만 해제되고 경매·거래에는 영향이 없어요.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(false),
-            child: const Text('취소'),
-          ),
+              onPressed: () => Navigator.of(dctx).pop(false),
+              child: const Text('취소')),
           FilledButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(true),
-            child: Text('${ended.length}개 정리'),
-          ),
+              onPressed: () => Navigator.of(dctx).pop(true),
+              child: Text('${targets.length}개 해제')),
         ],
       ),
     );
-    if (confirmed != true) return;
-
+    if (ok != true) return;
     var removed = 0;
-    for (final p in ended) {
-      final result = await DuckAuctionStore.toggleFavorite(p);
-      if (result.success) removed++;
+    for (final p in targets) {
+      final r = await DuckAuctionStore.toggleFavorite(p);
+      if (r.success) removed++;
     }
     if (!mounted) return;
+    _exitSelection();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(removed > 0
-            ? '종료된 찜 $removed개를 정리했어요.'
-            : '정리 중 문제가 있었어요. 잠시 후 다시 시도해주세요.'),
-      ),
+      SnackBar(content: Text('$removed개를 찜 해제했어요.')),
     );
+  }
+
+  // 하트를 직접 눌러 바로 찜 해제.
+  Future<void> _unfavorite(ProductItem p) async {
+    final r = await DuckAuctionStore.toggleFavorite(p);
+    if (!mounted) return;
+    if (!r.success && r.message != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(r.message!)));
+    }
   }
 
   @override
@@ -1848,39 +1871,32 @@ class _FavoritesCollectionScreenState extends State<FavoritesCollectionScreen> {
               final favProducts = products
                   .where((p) => _isFavorited(p, favorites))
                   .toList();
-              final visible = _category == _allCategory
-                  ? favProducts
-                  : favProducts
-                      .where((p) => p.category == _category)
-                      .toList();
-              final endedCount = favProducts.where(_isEnded).length;
+              final visible = _applyFilters(favProducts);
 
               return Column(
                 children: [
-                  _buildFilterBar(endedCount, favProducts),
+                  _buildFilterBar(visible),
                   Expanded(
                     child: favProducts.isEmpty
-                        ? const Center(
-                            child: Text('아직 찜한 상품이 없어요.',
-                                style: TextStyle(
-                                    color: Color(0xFF64748B),
-                                    fontWeight: FontWeight.w800)),
-                          )
+                        ? _empty('아직 찜한 상품이 없어요.')
                         : (visible.isEmpty
-                            ? Center(
-                                child: Text(
-                                  "'$_category' 카테고리에 찜한 경매가 없어요.",
-                                  style: const TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontWeight: FontWeight.w800),
-                                ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.fromLTRB(
-                                    16, 12, 16, 24),
-                                itemCount: visible.length,
-                                itemBuilder: (context, index) =>
-                                    ProductListTile(product: visible[index]),
+                            ? _empty(_emptyFilterText())
+                            : ListView(
+                                padding: EdgeInsets.zero,
+                                children: [
+                                  ResponsiveContentBounds(
+                                    maxWidth: double.infinity,
+                                    padding: EdgeInsets.fromLTRB(16, 12, 16,
+                                        24 + MediaQuery.of(context).padding.bottom),
+                                    child: ResponsiveCardFlow(
+                                      spacing: 12,
+                                      runSpacing: 12,
+                                      phoneColumns: 2,
+                                      tabletColumns: 3,
+                                      children: visible.map(_favCard).toList(),
+                                    ),
+                                  ),
+                                ],
                               )),
                   ),
                 ],
@@ -1892,45 +1908,199 @@ class _FavoritesCollectionScreenState extends State<FavoritesCollectionScreen> {
     );
   }
 
-  Widget _buildFilterBar(int endedCount, List<ProductItem> favProducts) {
+  Widget _empty(String text) => Center(
+        child: Text(text,
+            style: const TextStyle(
+                color: Color(0xFF64748B), fontWeight: FontWeight.w800)),
+      );
+
+  String _emptyFilterText() =>
+      (_category == AppCategories.kuji && _kujiGrade != _allGrade)
+          ? "'쿠지 · $_kujiGrade'에 찜한 경매가 없어요."
+          : "'$_category' 카테고리에 찜한 경매가 없어요.";
+
+  // 찜 카드: 다른 목록과 동일한 표준 ProductCard(정보 전부 노출).
+  // 평소엔 사진 우하단 하트(누르면 해제), 선택 모드엔 좌상단 체크(누르면 선택).
+  Widget _favCard(ProductItem p) {
+    final key = _keyOf(p);
+    final selected = _selectedKeys.contains(key);
+
+    if (_selectionMode) {
+      return Stack(
+        children: [
+          Opacity(
+            opacity: selected ? 1.0 : 0.6,
+            child: IgnorePointer(child: ProductCard(product: p, width: null)),
+          ),
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() {
+                if (selected) {
+                  _selectedKeys.remove(key);
+                } else {
+                  _selectedKeys.add(key);
+                }
+              }),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              decoration: const BoxDecoration(
+                  color: Colors.white, shape: BoxShape.circle),
+              child: Icon(
+                selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 26,
+                color:
+                    selected ? const Color(0xFFDB2777) : const Color(0xFF9CA3AF),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Stack(
+      children: [
+        ProductCard(product: p, width: null),
+        // 사진(높이 128) 영역의 우하단에 하트를 얹어, 상태 뱃지와 겹치지 않게 해요.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 128,
+          child: Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.all(7),
+              child: Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                elevation: 1,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => _unfavorite(p),
+                  child: const Padding(
+                    padding: EdgeInsets.all(5),
+                    child: Icon(Icons.favorite_rounded,
+                        color: Color(0xFFFF6F91), size: 20),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 상단 바: 선택 모드가 아닐 땐 필터 드롭박스 + [선택], 선택 모드일 땐
+  // [취소]·[전체 선택]·[삭제(N)] — 내 경매관리(판매)와 동일한 툴바예요.
+  Widget _buildFilterBar(List<ProductItem> visible) {
     return Container(
-      padding: EdgeInsets.fromLTRB(context.pagePadding, 9, context.pagePadding, 9),
+      padding:
+          EdgeInsets.fromLTRB(context.pagePadding, 9, context.pagePadding, 9),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: PopupMenuButton<String>(
-                initialValue: _category,
-                onSelected: (v) => setState(() => _category = v),
-                itemBuilder: (_) => _categoryOptions
-                    .map((value) =>
-                        PopupMenuItem<String>(value: value, child: Text(value)))
-                    .toList(),
-                child: _FilterPill(label: _category),
-              ),
+      child: _selectionMode ? _selectionRow(visible) : _filterRow(visible),
+    );
+  }
+
+  Widget _filterRow(List<ProductItem> visible) {
+    return Row(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                PopupMenuButton<String>(
+                  initialValue: _category,
+                  onSelected: (v) => setState(() {
+                    _category = v;
+                    if (v != AppCategories.kuji) _kujiGrade = _allGrade;
+                    _selectedKeys.clear();
+                  }),
+                  itemBuilder: (_) => _categoryOptions
+                      .map((value) => PopupMenuItem<String>(
+                          value: value, child: Text(value)))
+                      .toList(),
+                  child: _FilterPill(label: _category),
+                ),
+                // 쿠지 카테고리를 고르면 우측에 상위상/하위상/전체 등급 드롭박스가 생겨요.
+                if (_category == AppCategories.kuji) ...[
+                  const SizedBox(width: 6),
+                  PopupMenuButton<String>(
+                    initialValue: _kujiGrade,
+                    onSelected: (v) => setState(() {
+                      _kujiGrade = v;
+                      _selectedKeys.clear();
+                    }),
+                    itemBuilder: (_) => _gradeOptions
+                        .map((value) => PopupMenuItem<String>(
+                            value: value,
+                            child: Text(value == _allGrade ? '전체 등급' : value)))
+                        .toList(),
+                    child: _FilterPill(
+                        label: _kujiGrade == _allGrade ? '전체 등급' : _kujiGrade),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed:
-                endedCount > 0 ? () => _clearEnded(favProducts) : null,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFDC2626),
-              side: const BorderSide(color: Color(0xFFFECACA)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-            label: Text(endedCount > 0 ? '종료 삭제 ($endedCount)' : '종료 삭제'),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: visible.isEmpty
+              ? null
+              : () => setState(() {
+                    _selectionMode = true;
+                    _selectedKeys.clear();
+                  }),
+          icon: const Icon(Icons.checklist_rounded, size: 18),
+          label: const Text('선택'),
+        ),
+      ],
+    );
+  }
+
+  Widget _selectionRow(List<ProductItem> visible) {
+    final total = visible.length;
+    final allSel = total > 0 && _selectedKeys.length >= total;
+    return Row(
+      children: [
+        TextButton(onPressed: _exitSelection, child: const Text('취소')),
+        TextButton(
+          onPressed: total == 0
+              ? null
+              : () => setState(() {
+                    if (allSel) {
+                      _selectedKeys.clear();
+                    } else {
+                      _selectedKeys
+                        ..clear()
+                        ..addAll(visible.map(_keyOf));
+                    }
+                  }),
+          child: Text(allSel ? '선택 해제' : '전체 선택'),
+        ),
+        const Spacer(),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFDC2626),
+            disabledBackgroundColor: const Color(0xFFE7BBBB),
+            foregroundColor: Colors.white,
           ),
-        ],
-      ),
+          onPressed:
+              _selectedKeys.isEmpty ? null : () => _deleteSelected(visible),
+          icon: const Icon(Icons.delete_outline, size: 18),
+          label: Text('삭제 (${_selectedKeys.length})'),
+        ),
+      ],
     );
   }
 }
@@ -1955,7 +2125,16 @@ class _FilteredAuctionListView extends StatefulWidget {
 }
 
 class _FilteredAuctionListViewState extends State<_FilteredAuctionListView> {
+  static const String _allCategory = '전체';
+  static const String _allGrade = '전체';
   late _AuctionSort _sort = widget.initialSort;
+  String _category = _allCategory;
+  String _kujiGrade = _allGrade; // 쿠지 하위 등급(전체/상위상/하위상)
+
+  List<String> get _categoryOptions =>
+      <String>[_allCategory, ...AppCategories.names];
+  List<String> get _gradeOptions =>
+      <String>[_allGrade, ...AppCategories.kujiGrades];
 
   int _priceOf(ProductItem p) {
     if (p.currentPrice > 0) return p.currentPrice;
@@ -1983,8 +2162,19 @@ class _FilteredAuctionListViewState extends State<_FilteredAuctionListView> {
     }
   }
 
-  List<ProductItem> _sorted() {
-    final result = List<ProductItem>.from(widget.products);
+  // 카테고리(+쿠지일 때 등급) 필터를 적용해요.
+  List<ProductItem> _applyCategory(List<ProductItem> list) {
+    var out = _category == _allCategory
+        ? list
+        : list.where((p) => p.category == _category).toList();
+    if (_category == AppCategories.kuji && _kujiGrade != _allGrade) {
+      out = out.where((p) => p.kujiGrade == _kujiGrade).toList();
+    }
+    return out;
+  }
+
+  List<ProductItem> _sortList(List<ProductItem> src) {
+    final result = List<ProductItem>.from(src);
     switch (_sort) {
       case _AuctionSort.latest:
         result.sort((a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -2009,7 +2199,7 @@ class _FilteredAuctionListViewState extends State<_FilteredAuctionListView> {
 
   @override
   Widget build(BuildContext context) {
-    final items = _sorted();
+    final items = _sortList(_applyCategory(widget.products));
     return Column(
       children: [
         Container(
@@ -2020,14 +2210,55 @@ class _FilteredAuctionListViewState extends State<_FilteredAuctionListView> {
           ),
           child: Row(
             children: [
-              PopupMenuButton<_AuctionSort>(
-                initialValue: _sort,
-                onSelected: (v) => setState(() => _sort = v),
-                itemBuilder: (_) => _AuctionSort.values
-                    .map((v) => PopupMenuItem<_AuctionSort>(
-                        value: v, child: Text(_sortLabel(v))))
-                    .toList(),
-                child: _FilterPill(label: _sortLabel(_sort)),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      // 카테고리 필터
+                      PopupMenuButton<String>(
+                        initialValue: _category,
+                        onSelected: (v) => setState(() {
+                          _category = v;
+                          if (v != AppCategories.kuji) _kujiGrade = _allGrade;
+                        }),
+                        itemBuilder: (_) => _categoryOptions
+                            .map((value) => PopupMenuItem<String>(
+                                value: value, child: Text(value)))
+                            .toList(),
+                        child: _FilterPill(label: _category),
+                      ),
+                      // 쿠지를 고르면 상위상/하위상/전체 등급 필터가 생겨요.
+                      if (_category == AppCategories.kuji) ...[
+                        const SizedBox(width: 6),
+                        PopupMenuButton<String>(
+                          initialValue: _kujiGrade,
+                          onSelected: (v) => setState(() => _kujiGrade = v),
+                          itemBuilder: (_) => _gradeOptions
+                              .map((value) => PopupMenuItem<String>(
+                                  value: value,
+                                  child: Text(
+                                      value == _allGrade ? '전체 등급' : value)))
+                              .toList(),
+                          child: _FilterPill(
+                              label:
+                                  _kujiGrade == _allGrade ? '전체 등급' : _kujiGrade),
+                        ),
+                      ],
+                      const SizedBox(width: 6),
+                      // 정렬 필터
+                      PopupMenuButton<_AuctionSort>(
+                        initialValue: _sort,
+                        onSelected: (v) => setState(() => _sort = v),
+                        itemBuilder: (_) => _AuctionSort.values
+                            .map((v) => PopupMenuItem<_AuctionSort>(
+                                value: v, child: Text(_sortLabel(v))))
+                            .toList(),
+                        child: _FilterPill(label: _sortLabel(_sort)),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -2041,7 +2272,11 @@ class _FilteredAuctionListViewState extends State<_FilteredAuctionListView> {
                         color: Color(0xFF64748B), fontWeight: FontWeight.w800),
                   ),
                 )
-              : AuctionCardGrid(products: items),
+              : AuctionCardGrid(
+                  products: items,
+                  padding: EdgeInsets.fromLTRB(
+                      16, 12, 16, 24 + MediaQuery.of(context).padding.bottom),
+                ),
         ),
       ],
     );
