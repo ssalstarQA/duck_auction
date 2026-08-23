@@ -139,12 +139,14 @@ class ProductCollectionScreen extends StatelessWidget {
     final result = List<ProductItem>.from(products);
     switch (mode) {
       case ProductCollectionMode.popular:
-        result.sort((a, b) {
+        // 거래완료·유찰·낙찰 등 종료된 경매는 인기 목록에서 제외한다.
+        final active = result.where((product) => product.isAuctionActive).toList();
+        active.sort((a, b) {
           final aScore = DuckAuctionStore.parseCount(a.bids) * 10 + DuckAuctionStore.parseCount(a.likes) * 3;
           final bScore = DuckAuctionStore.parseCount(b.bids) * 10 + DuckAuctionStore.parseCount(b.likes) * 3;
           return bScore.compareTo(aScore);
         });
-        return result;
+        return active;
       case ProductCollectionMode.newest:
         return result.where((product) => product.isAuctionActive).toList()
           ..sort((a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -382,6 +384,7 @@ class _AllMenuScreenState extends State<AllMenuScreen> {
                 action: () => _push(const MyReportHistoryScreen()),
               )),
           _AllMenuEntry('support:notices', Icons.campaign_rounded, '공지사항', '서비스 안내와 업데이트 소식을 확인하세요.', color, () => _push(const EventListScreen())),
+          _AllMenuEntry('support:ad', Icons.storefront_rounded, '광고주 모집', '홈 배너·카테고리 광고 문의를 남겨보세요.', color, () => _push(const AdvertisementInquiryScreen())),
         ];
       case _AllMenuCategory.settings:
         final color = _colorOf(_AllMenuCategory.settings);
@@ -1837,8 +1840,21 @@ class _FavoritesCollectionScreenState extends State<FavoritesCollectionScreen> {
     );
   }
 
-  // 하트를 직접 눌러 바로 찜 해제.
+  // 하트를 직접 눌러 찜 해제 — 실수 방지를 위해 확인 팝업 후 해제.
   Future<void> _unfavorite(ProductItem p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('찜 해제', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text('이 경매를 찜 목록에서 뺄까요? 찜만 해제되고 경매·거래에는 영향이 없어요.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: const Text('취소')),
+          FilledButton(onPressed: () => Navigator.of(dctx).pop(true), child: const Text('찜 해제')),
+        ],
+      ),
+    );
+    if (ok != true) return;
     final r = await DuckAuctionStore.toggleFavorite(p);
     if (!mounted) return;
     if (!r.success && r.message != null) {

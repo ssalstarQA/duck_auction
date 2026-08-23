@@ -72,8 +72,11 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    if (password.length < 8) {
-      _showMessage('비밀번호는 8자 이상 입력해주세요.');
+    final hasLetter = RegExp(r'[A-Za-z]').hasMatch(password);
+    final hasDigit = RegExp(r'[0-9]').hasMatch(password);
+    final hasSpecial = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
+    if (password.length < 8 || !hasLetter || !hasDigit || !hasSpecial) {
+      _showMessage('비밀번호는 영문·숫자·특수문자를 모두 포함해 8자 이상이어야 해요.');
       return;
     }
 
@@ -104,12 +107,7 @@ class _SignupScreenState extends State<SignupScreen> {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('회원가입 완료'),
-            content: const Text(
-              '덕옥션 가입이 완료되었습니다.\n이메일 인증을 진행해주세요.\n\n'
-              '둘러보는 건 지금도 자유롭게 가능하지만, 경매 등록이나 입찰처럼\n'
-              '실제 거래를 하시려면 이메일 인증과 휴대폰 인증이 추가로 필요해요.\n'
-              '해당 기능을 이용하실 때 안내해드릴게요.',
-            ),
+            content: const Text('가입이 완료됐어요. 이어서 이메일 인증을 진행해주세요.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -127,7 +125,7 @@ class _SignupScreenState extends State<SignupScreen> {
         (route) => false,
       );
     } on RejoinBlockedException catch (e) {
-      _showMessage('탈퇴 후 재가입까지 ${e.remainingDays}일 남았어요. 잠시 후 다시 시도해주세요.');
+      _showMessage('탈퇴한 이메일이에요. ${e.remainingDays}일 후에 다시 가입할 수 있어요.');
     } on FirebaseAuthException catch (e) {
       _showMessage(_authErrorMessage(e.code));
     } catch (_) {
@@ -338,9 +336,11 @@ class _SignupScreenState extends State<SignupScreen> {
                   _AuthTextField(
                     controller: passwordController,
                     label: '비밀번호',
-                    hintText: '8자 이상 입력해주세요',
+                    hintText: '영문·숫자·특수문자 포함 8자 이상',
                     obscureText: true,
+                    onChanged: (_) => setState(() {}),
                   ),
+                  _PasswordStrengthMeter(password: passwordController.text),
                   const SizedBox(height: 14),
                   _AuthTextField(
                     controller: passwordConfirmController,
@@ -709,12 +709,13 @@ class _AgreementChip extends StatelessWidget {
   }
 }
 
-class _AuthTextField extends StatelessWidget {
+class _AuthTextField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final String hintText;
   final bool obscureText;
   final TextInputType? keyboardType;
+  final ValueChanged<String>? onChanged;
 
   const _AuthTextField({
     required this.controller,
@@ -722,7 +723,15 @@ class _AuthTextField extends StatelessWidget {
     required this.hintText,
     this.obscureText = false,
     this.keyboardType,
+    this.onChanged,
   });
+
+  @override
+  State<_AuthTextField> createState() => _AuthTextFieldState();
+}
+
+class _AuthTextFieldState extends State<_AuthTextField> {
+  late bool _obscured = widget.obscureText;
 
   @override
   Widget build(BuildContext context) {
@@ -730,7 +739,7 @@ class _AuthTextField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
+          widget.label,
           style: const TextStyle(
             color: Color(0xFF334155),
             fontWeight: FontWeight.w800,
@@ -739,15 +748,28 @@ class _AuthTextField extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          obscureText: obscureText,
+          controller: widget.controller,
+          keyboardType: widget.keyboardType,
+          obscureText: _obscured,
+          onChanged: widget.onChanged,
           decoration: InputDecoration(
-            hintText: hintText,
+            hintText: widget.hintText,
             hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
             filled: true,
             fillColor: const Color(0xFFF8FAFC),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+            // 비밀번호 입력란 우측: 눈 모양 버튼(입력값 표시/숨김 토글)
+            suffixIcon: widget.obscureText
+                ? IconButton(
+                    onPressed: () => setState(() => _obscured = !_obscured),
+                    icon: Icon(
+                      _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      color: const Color(0xFF94A3B8),
+                      size: 21,
+                    ),
+                    tooltip: _obscured ? '비밀번호 표시' : '비밀번호 숨기기',
+                  )
+                : null,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
@@ -759,6 +781,64 @@ class _AuthTextField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 비밀번호 강도(영문·숫자·특수문자·길이) 표시 막대. 비어 있으면 아무것도 안 그림.
+class _PasswordStrengthMeter extends StatelessWidget {
+  final String password;
+  const _PasswordStrengthMeter({required this.password});
+
+  @override
+  Widget build(BuildContext context) {
+    if (password.isEmpty) return const SizedBox.shrink();
+    final hasLetter = RegExp(r'[A-Za-z]').hasMatch(password);
+    final hasDigit = RegExp(r'[0-9]').hasMatch(password);
+    final hasSpecial = RegExp(r'[^A-Za-z0-9]').hasMatch(password);
+    final longEnough = password.length >= 8;
+    final score = [hasLetter, hasDigit, hasSpecial, longEnough].where((e) => e).length;
+    const labels = ['매우 약함', '약함', '보통', '안전', '매우 안전'];
+    final color = score >= 3
+        ? const Color(0xFF16A34A)
+        : (score == 2 ? const Color(0xFFF59E0B) : const Color(0xFFDC2626));
+    final missing = <String>[];
+    if (!hasLetter) missing.add('영문');
+    if (!hasDigit) missing.add('숫자');
+    if (!hasSpecial) missing.add('특수문자');
+    if (!longEnough) missing.add('8자 이상');
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: List.generate(4, (i) {
+              return Expanded(
+                child: Container(
+                  height: 5,
+                  margin: EdgeInsets.only(right: i < 3 ? 5 : 0),
+                  decoration: BoxDecoration(
+                    color: i < score ? color : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            missing.isEmpty
+                ? '안전한 비밀번호예요 · ${labels[score]}'
+                : '${missing.join('·')} 를 포함해주세요',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: missing.isEmpty ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

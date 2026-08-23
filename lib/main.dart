@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
@@ -27,6 +28,9 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // 카카오 로그인 SDK 초기화 (네이티브 앱 키 — 앱 내장용 공개 키)
+  KakaoSdk.init(nativeAppKey: 'd5a6ccea8c6530aa9960040510384c1f');
 
   // 화면(Flutter 위젯 빌드 등)에서 발생한 예외를 Analytics 이벤트로 남겨서
   // 최소한의 오류 가시성을 확보합니다. 콘솔에도 그대로 출력해 개발 중에는

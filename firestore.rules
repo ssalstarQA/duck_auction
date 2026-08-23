@@ -38,6 +38,16 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    //  phoneNumbers — 1번호=1계정. 번호 문서는 소유자가 '생성'만 가능(create-only)하고,
+    //  이미 존재하면 다른 계정이 못 만들어 중복 등록을 막아요. 수정·삭제는 관리자만.
+    // ========================================================================
+    match /phoneNumbers/{phone} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isMaster();
+    }
+
+    // ========================================================================
     //  products — 공개 마켓(누구나 읽기). 쓰기는 소유자/입찰/좋아요/신고로 제한.
     // ========================================================================
     match /products/{productId} {

@@ -6837,21 +6837,53 @@ class _MySettingsScreenState extends State<MySettingsScreen> {
 
     final confirmedWarning = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('정말 탈퇴하시겠어요?'),
-        content: Text(
-          '탈퇴 시 프로필 정보가 삭제되고, 등록한 경매는 숨김 처리되어 더 이상 다른 사용자에게 노출되지 않아요.\n'
-          '진행 중인 거래나 채팅 기록은 상대방 보호를 위해 남아있을 수 있으며, 이 작업은 되돌릴 수 없어요.\n\n'
-          '탈퇴 후 ${AuthService.rejoinCooldown.inDays}일 동안은 같은 이메일로 다시 가입할 수 없어요.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('취소')),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('탈퇴할래요', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900)),
+      builder: (context) {
+        bool agreed = false;
+        return StatefulBuilder(
+          builder: (context, setLocal) => AlertDialog(
+            title: const Text('정말 탈퇴하시겠어요?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '탈퇴 시 프로필 정보가 삭제되고, 등록한 경매는 숨김 처리되어 더 이상 다른 사용자에게 노출되지 않아요.\n'
+                  '진행 중인 거래나 채팅 기록은 상대방 보호를 위해 남아있을 수 있으며, 이 작업은 되돌릴 수 없어요.\n\n'
+                  '탈퇴 후 ${AuthService.rejoinCooldown.inDays}일 동안은 같은 이메일로 다시 가입할 수 없어요.',
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setLocal(() => agreed = !agreed),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: agreed,
+                        onChanged: (v) => setLocal(() => agreed = v ?? false),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const Expanded(
+                        child: Text('위 내용을 확인했으며 탈퇴에 동의합니다.',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('취소')),
+              TextButton(
+                onPressed: agreed ? () => Navigator.of(context).pop(true) : null,
+                child: Text('탈퇴할래요',
+                    style: TextStyle(
+                        color: agreed ? const Color(0xFFEF4444) : const Color(0xFFCBD5E1),
+                        fontWeight: FontWeight.w900)),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
 
     if (confirmedWarning != true || !mounted) return;
@@ -6899,7 +6931,11 @@ class _MySettingsScreenState extends State<MySettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('회원 탈퇴가 완료됐어요. 그동안 덕옥션을 이용해주셔서 감사합니다.')),
       );
-      widget.onLogout();
+      // 탈퇴 완료 후에는 로그아웃 확인창 없이 바로 로그인 화면으로 보냄.
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       final message = switch (e.code) {
@@ -6932,7 +6968,8 @@ class _MySettingsScreenState extends State<MySettingsScreen> {
         children: [
           ResponsiveContentBounds(
             maxWidth: context.responsive(phone: double.infinity, tablet: 640.0),
-            padding: const EdgeInsets.all(16),
+            // 하단 시스템 내비게이션 바에 회원탈퇴 버튼이 가리지 않도록 인셋만큼 여백 추가.
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
             child: Column(children: [
           _SettingsSection(
             title: '계정',

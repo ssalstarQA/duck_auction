@@ -51,16 +51,6 @@ class _HeroBannerState extends State<_HeroBanner> {
         ),
         const _BannerData(
           eyebrow: '덕옥션 파트너',
-          title: '광고주 모집',
-          description: '홈 상단 메인 배너에 상점·상품을 노출해요.',
-          actionText: '광고 문의하기',
-          icon: Icons.campaign_rounded,
-          backgroundColor: Color(0xFFF4F7FC),
-          borderColor: Color(0xFFE5E7EB),
-          accentColor: kBannerBlue,
-        ),
-        const _BannerData(
-          eyebrow: '덕옥션 파트너',
           title: '카테고리 추천 광고',
           description: '추천 굿즈의 카테고리를\n별도 메뉴로 독립해 노출해요.',
           actionText: '광고 문의하기',
@@ -68,16 +58,6 @@ class _HeroBannerState extends State<_HeroBanner> {
           backgroundColor: Color(0xFFF4F7FC),
           borderColor: Color(0xFFE5E7EB),
           accentColor: kBannerBlue,
-        ),
-        const _BannerData(
-          eyebrow: '출시 기념 이벤트',
-          title: '2주간 판매 수수료 무료',
-          description: '이벤트 기간에 등록한 경매는\n판매 수수료가 0원이에요.',
-          actionText: '이벤트 확인하기',
-          icon: Icons.card_giftcard_rounded,
-          backgroundColor: Color(0xFFF4F7FC),
-          borderColor: Color(0xFFE5E7EB),
-          accentColor: kBannerOrange,
         ),
         const _BannerData(
           eyebrow: '5주 한정 이벤트',

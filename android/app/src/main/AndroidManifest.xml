@@ -3,6 +3,7 @@
          (앱이 FirebaseMessaging.requestPermission()을 호출하면 이 권한을 근거로
          시스템이 사용자에게 알림 허용 여부를 물어봅니다.) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="덕옥션"
         android:name="${applicationName}"
@@ -47,6 +48,21 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/UCropTheme"/>
+        <!-- 카카오 로그인 리다이렉트 처리 액티비티 (scheme = kakao{네이티브앱키}) -->
+        <activity
+            android:name="com.kakao.sdk.flutter.AuthCodeHandlerActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:host="oauth" android:scheme="kakaod5a6ccea8c6530aa9960040510384c1f" />
+            </intent-filter>
+        </activity>
+        <!-- 네이버 로그인 설정 (clientSecret은 로컬에서 실제 값으로 교체하세요) -->
+        <meta-data android:name="com.naver.sdk.clientId" android:value="dpxPDMk7MCKaUv4lgdKR"/>
+        <meta-data android:name="com.naver.sdk.clientSecret" android:value="dBLt1fFA6t"/>
+        <meta-data android:name="com.naver.sdk.clientName" android:value="덕옥션"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -54,6 +70,7 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <package android:name="com.kakao.talk" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

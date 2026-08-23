@@ -1,4 +1,10 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_naver_login/flutter_naver_login.dart';
+import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
 import '../utils/responsive.dart';
 import 'email_login_screen.dart';
@@ -14,11 +20,147 @@ class LoginScreen extends StatelessWidget {
     );
   }
 
-  void _showPreparing(BuildContext context, String provider) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$provider 로그인은 연동 준비 중이에요. 현재는 이메일 로그인을 이용해주세요.'),
+  // 카카오 로그인: SDK로 로그인 → accessToken을 Cloud Function(kakaoLogin)에 보내
+  // Firebase 커스텀 토큰을 받아 signInWithCustomToken으로 로그인해요.
+  Future<void> _kakaoLogin(BuildContext context) async {
+    try {
+      OAuthToken token;
+      if (await isKakaoTalkInstalled()) {
+        try {
+          token = await UserApi.instance.loginWithKakaoTalk();
+        } catch (_) {
+          // 카카오톡 로그인 취소/실패 시 카카오계정 로그인으로 폴백
+          token = await UserApi.instance.loginWithKakaoAccount();
+        }
+      } else {
+        token = await UserApi.instance.loginWithKakaoAccount();
+      }
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('kakaoLogin')
+          .call<Map<String, dynamic>>({'accessToken': token.accessToken});
+      final firebaseToken = res.data['token'] as String;
+      await FirebaseAuth.instance.signInWithCustomToken(firebaseToken);
+      if (!context.mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('카카오 로그인에 실패했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  // 네이버 로그인: SDK로 로그인 → accessToken을 Cloud Function(naverLogin)에 보내
+  // Firebase 커스텀 토큰을 받아 signInWithCustomToken으로 로그인해요.
+  Future<void> _naverLogin(BuildContext context) async {
+    try {
+      await FlutterNaverLogin.logIn();
+      if (!await FlutterNaverLogin.isLoggedIn()) return;
+      final token = await FlutterNaverLogin.getCurrentAccessToken();
+      final callRes = await FirebaseFunctions.instance
+          .httpsCallable('naverLogin')
+          .call<Map<String, dynamic>>({'accessToken': token.accessToken});
+      final firebaseToken = callRes.data['token'] as String;
+      await FirebaseAuth.instance.signInWithCustomToken(firebaseToken);
+      if (!context.mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('네이버 로그인에 실패했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  // 구글 로그인: Firebase 기본 지원. 구글 자격증명으로 바로 signInWithCredential.
+  Future<void> _googleLogin(BuildContext context) async {
+    try {
+      final GoogleSignInAccount? gUser = await GoogleSignIn().signIn();
+      if (gUser == null) return; // 사용자가 취소
+      final GoogleSignInAuthentication gAuth = await gUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: gAuth.accessToken,
+        idToken: gAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (!context.mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google 로그인에 실패했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  // 애플 로그인: Firebase 기본 지원. iOS는 네이티브, Android/웹은 Services ID
+  // 기반 웹 플로우로 동작해요(clientId는 본인 Services ID로 확인).
+  Future<void> _appleLogin(BuildContext context) async {
+    try {
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        webAuthenticationOptions: WebAuthenticationOptions(
+          clientId: 'com.duckauction.signin',
+          redirectUri: Uri.parse('https://duck-auction.firebaseapp.com/__/auth/handler'),
+        ),
+      );
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
+      await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      if (!context.mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apple 로그인에 실패했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  // 게스트 진입 전, 게스트로는 불가능한 동작을 안내하고 동의를 받은 뒤 진입.
+  Future<void> _enterGuest(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('게스트로 둘러보기'),
+        content: const Text(
+          '로그인 없이 경매를 구경할 수 있어요. 다만 입찰·경매 등록·찜·채팅 같은 거래 기능은 로그인 후에 이용할 수 있어요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF16305C)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('둘러볼게요'),
+          ),
+        ],
       ),
+    );
+    if (ok != true || !context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
     );
   }
 
@@ -85,7 +227,7 @@ class LoginScreen extends StatelessWidget {
                     iconText: 'K',
                     backgroundColor: const Color(0xFFFEE500),
                     foregroundColor: const Color(0xFF191919),
-                    onTap: () => _showPreparing(context, '카카오'),
+                    onTap: () => _kakaoLogin(context),
                   ),
                   const SizedBox(height: 10),
                   _SocialLoginButton(
@@ -93,7 +235,7 @@ class LoginScreen extends StatelessWidget {
                     iconText: 'N',
                     backgroundColor: const Color(0xFF03C75A),
                     foregroundColor: Colors.white,
-                    onTap: () => _showPreparing(context, '네이버'),
+                    onTap: () => _naverLogin(context),
                   ),
                   const SizedBox(height: 10),
                   _SocialLoginButton(
@@ -102,15 +244,16 @@ class LoginScreen extends StatelessWidget {
                     backgroundColor: Colors.white,
                     foregroundColor: const Color(0xFF111827),
                     borderColor: const Color(0xFFE2E8F0),
-                    onTap: () => _showPreparing(context, 'Google'),
+                    onTap: () => _googleLogin(context),
                   ),
                   const SizedBox(height: 10),
                   _SocialLoginButton(
                     text: 'Apple로 계속하기',
-                    iconText: '',
+                    iconText: '',
+                    icon: Icons.apple,
                     backgroundColor: const Color(0xFF111827),
                     foregroundColor: Colors.white,
-                    onTap: () => _showPreparing(context, 'Apple'),
+                    onTap: () => _appleLogin(context),
                   ),
                   const SizedBox(height: 22),
                   const _DividerWithText(text: '또는'),
@@ -127,12 +270,7 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const HomeScreen()),
-                        (route) => false,
-                      );
-                    },
+                    onPressed: () => _enterGuest(context),
                     child: const Text(
                       '게스트로 둘러보기',
                       style: TextStyle(
@@ -169,6 +307,7 @@ class _SocialLoginButton extends StatelessWidget {
   final Color backgroundColor;
   final Color foregroundColor;
   final Color? borderColor;
+  final IconData? icon;
   final VoidCallback onTap;
 
   const _SocialLoginButton({
@@ -178,6 +317,7 @@ class _SocialLoginButton extends StatelessWidget {
     required this.foregroundColor,
     required this.onTap,
     this.borderColor,
+    this.icon,
   });
 
   @override
@@ -208,14 +348,16 @@ class _SocialLoginButton extends StatelessWidget {
                   color: foregroundColor.withOpacity(backgroundColor == Colors.white ? 0.04 : 0.10),
                   shape: BoxShape.circle,
                 ),
-                child: Text(
-                  iconText,
-                  style: TextStyle(
-                    fontSize: iconText == '' ? 20 : 15,
-                    fontWeight: FontWeight.w900,
-                    color: foregroundColor,
-                  ),
-                ),
+                child: icon != null
+                    ? Icon(icon, size: 19, color: foregroundColor)
+                    : Text(
+                        iconText,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: foregroundColor,
+                        ),
+                      ),
               ),
             ),
             Text(

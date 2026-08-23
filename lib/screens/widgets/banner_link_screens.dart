@@ -19,7 +19,7 @@ class EndingSoonAuctionsScreen extends StatelessWidget {
             ...registeredAuctions,
             ...HomeTab.popularProducts.reversed,
             ...HomeTab.recentProducts,
-          ];
+          ].where((p) => p.isAuctionActive).toList(); // 거래완료·유찰·낙찰 등 종료 경매 제외
 
           return _FilteredAuctionListView(
             products: products,

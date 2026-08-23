@@ -337,7 +337,7 @@ class _AuthScaffold extends StatelessWidget {
   }
 }
 
-class _AuthTextField extends StatelessWidget {
+class _AuthTextField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final String hintText;
@@ -353,12 +353,19 @@ class _AuthTextField extends StatelessWidget {
   });
 
   @override
+  State<_AuthTextField> createState() => _AuthTextFieldState();
+}
+
+class _AuthTextFieldState extends State<_AuthTextField> {
+  late bool _obscured = widget.obscureText;
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
+          widget.label,
           style: const TextStyle(
             color: Color(0xFF475569),
             fontWeight: FontWeight.w800,
@@ -367,11 +374,11 @@ class _AuthTextField extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          obscureText: obscureText,
+          controller: widget.controller,
+          keyboardType: widget.keyboardType,
+          obscureText: _obscured,
           decoration: InputDecoration(
-            hintText: hintText,
+            hintText: widget.hintText,
             hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
             filled: true,
             fillColor: Colors.white,
@@ -379,6 +386,17 @@ class _AuthTextField extends StatelessWidget {
               horizontal: 18,
               vertical: 16,
             ),
+            suffixIcon: widget.obscureText
+                ? IconButton(
+                    onPressed: () => setState(() => _obscured = !_obscured),
+                    icon: Icon(
+                      _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      color: const Color(0xFF94A3B8),
+                      size: 21,
+                    ),
+                    tooltip: _obscured ? '비밀번호 표시' : '비밀번호 숨기기',
+                  )
+                : null,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
               borderSide: const BorderSide(color: Color(0xFFFFD7E1)),

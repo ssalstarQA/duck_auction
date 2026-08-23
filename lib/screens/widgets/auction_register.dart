@@ -1059,6 +1059,7 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
             Expanded(
               child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
@@ -1069,6 +1070,23 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
               if (!_isEditMode) const _FeeEventBanner(),
+              // * 가 붙은 항목이 필수라는 걸 화면 상단에 작게 안내해요.
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: const [
+                    Text(
+                      '*',
+                      style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900, fontSize: 12),
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      '표시는 필수 입력 항목이에요.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
               _PhotoPickerBox(
                 existingImageUrls: List<String>.from(_existingImageUrls),
                 existingPreviewBytesList: List<Uint8List>.from(_existingPreviewBytesList),
@@ -1087,6 +1105,7 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                     controller: _titleController,
                     label: '제목',
                     hint: '상품명을 입력해주세요.',
+                    isRequired: true,
                     validator: (value) => value == null || value.trim().isEmpty ? '제목을 입력해주세요.' : null,
                   ),
                   _UnderlineTextField(
@@ -1099,6 +1118,11 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                     controller: _tagController,
                     label: '태그',
                     hint: '예: 치이카와, 인형, 한정판',
+                    isRequired: true,
+                    helperText: '쉼표로 구분해 최소 1개 이상 입력해주세요. (검색 노출에 사용돼요)',
+                    validator: (value) => (value == null || value.trim().isEmpty)
+                        ? '태그를 최소 1개 입력해주세요.'
+                        : null,
                   ),
                 ],
               ),
@@ -1168,8 +1192,19 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
                       controller: _shippingFeeController,
                       label: '$_shippingOption 배송비',
                       hint: _shipRangeHint(_shippingOption),
+                      isRequired: true,
                       keyboardType: TextInputType.number,
                       helperText: '${_shipRangeHint(_shippingOption)} 사이로 입력해주세요.',
+                      validator: (value) {
+                        final fee = _parseNumber(value ?? '');
+                        final range = _shippingRanges[_shippingOption];
+                        if (range == null) return null;
+                        if (fee < range.$1 || fee > range.$2) {
+                          return '$_shippingOption 배송비는 ${_shipRangeHint(_shippingOption)} 사이로 입력해주세요.';
+                        }
+                        if (fee % 100 != 0) return '배송비는 100원 단위로 입력해주세요.';
+                        return null;
+                      },
                     ),
                 ],
               ),
@@ -1621,6 +1656,8 @@ class _UnderlineTextField extends StatelessWidget {
   final String? helperText;
   final FocusNode? focusNode;
   final String? Function(String?)? validator;
+  // true면 라벨 옆에 빨간 * 를 붙여 필수 입력 항목임을 표시해요(사진 섹션과 동일한 표기).
+  final bool isRequired;
 
   const _UnderlineTextField({
     required this.controller,
@@ -1632,6 +1669,7 @@ class _UnderlineTextField extends StatelessWidget {
     this.helperText,
     this.focusNode,
     this.validator,
+    this.isRequired = false,
   });
 
   @override
@@ -1648,7 +1686,20 @@ class _UnderlineTextField extends StatelessWidget {
         fontWeight: enabled ? FontWeight.normal : FontWeight.w800,
       ),
       decoration: InputDecoration(
-        labelText: label,
+        labelText: isRequired ? null : label,
+        label: isRequired
+            ? Text.rich(
+                TextSpan(
+                  text: label,
+                  children: const [
+                    TextSpan(
+                      text: ' *',
+                      style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              )
+            : null,
         hintText: hint,
         helperText: helperText,
         alignLabelWithHint: maxLines > 1,
@@ -1672,6 +1723,8 @@ class _RegisterSelectTile extends StatelessWidget {
   final Map<String, String>? itemDescriptions;
   // 목록 전체에 대한 안내 문구가 필요할 때만 넣어요(예: 등급 기준 안내).
   final String? sheetNote;
+  // true면 라벨 옆에 빨간 * 를 붙여 필수 선택 항목임을 표시해요.
+  final bool isRequired;
 
   const _RegisterSelectTile({
     required this.label,
@@ -1680,6 +1733,7 @@ class _RegisterSelectTile extends StatelessWidget {
     required this.onChanged,
     this.itemDescriptions,
     this.sheetNote,
+    this.isRequired = true,
   });
 
   @override
@@ -1690,7 +1744,20 @@ class _RegisterSelectTile extends StatelessWidget {
       ),
       child: ListTile(
         contentPadding: EdgeInsets.zero,
-        title: Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF777777))),
+        title: isRequired
+            ? Text.rich(
+                TextSpan(
+                  text: label,
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF777777)),
+                  children: const [
+                    TextSpan(
+                      text: ' *',
+                      style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              )
+            : Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF777777))),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(value, style: const TextStyle(fontSize: 16, color: Colors.black, fontWeight: FontWeight.w800)),
@@ -1987,6 +2054,7 @@ class _NormalAuctionFields extends StatelessWidget {
           focusNode: startPriceFocusNode,
           label: '시작가',
           hint: '예: 10000',
+          isRequired: true,
           keyboardType: TextInputType.number,
           validator: (value) {
             final number = int.tryParse((value ?? '').replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;

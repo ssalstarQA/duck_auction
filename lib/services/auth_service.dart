@@ -101,10 +101,22 @@ class AuthService {
     // 남겨둡니다(실패해도 인증 자체는 이미 완료된 상태라 가입/이용은 막지 않아요).
     final user = _auth.currentUser;
     if (user != null) {
+      final phone = user.phoneNumber;
+      // 1번호=1계정 방어: 번호별 소유 계정을 기록해요. Firebase Auth가 link 단계에서
+      // 이미 중복 번호를 막지만(credential-already-in-use), 규칙(create-only)으로 한 겹
+      // 더 막고 관리자 조회도 가능하게 합니다.
+      if (phone != null && phone.isNotEmpty) {
+        try {
+          await _db.collection('phoneNumbers').doc(phone).set({
+            'uid': user.uid,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+      }
       try {
         await _db.collection('users').doc(user.uid).set({
           'phoneVerified': true,
-          'phoneNumber': user.phoneNumber,
+          'phoneNumber': phone,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       } catch (_) {
@@ -294,14 +306,9 @@ class AuthService {
 
     await user.updateDisplayName(nickname.trim());
 
-    // 인증 메일 발송이 실패해도(네트워크 문제 등) 회원가입 자체는 막지 않고,
-    // 이후 인증 화면에서 재발송 버튼으로 다시 시도할 수 있게 한다.
-    try {
-      await user.sendEmailVerification();
-    } catch (e) {
-      // ignore: avoid_print
-      print('Email verification send failed: $e');
-    }
+    // 인증 메일은 여기서 보내지 않는다. 가입 직후 이동하는 EmailVerificationScreen이
+    // 진입 시 한 번 발송하므로(재로그인 케이스까지 단일 처리), 여기서 또 보내면
+    // 동일한 인증 메일이 2통 발송되는 문제가 있었다.
 
     // Firestore 저장이 실패해도 회원가입 자체는 성공 처리한다.
     // 지금 단계에서는 Auth 연결 확인이 우선이라 Firestore 권한/DB 설정 때문에 가입이 막히지 않게 처리.

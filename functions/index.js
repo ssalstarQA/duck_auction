@@ -5,6 +5,7 @@ const {defineSecret} = require('firebase-functions/params');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp, FieldValue} = require('firebase-admin/firestore');
 const {getMessaging} = require('firebase-admin/messaging');
+const {getAuth} = require('firebase-admin/auth');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 
@@ -2254,6 +2255,96 @@ async function ticketConsume(uid, amount, reason, refId) {
 // ── 지급 트리거들 (기존 큰 함수는 건드리지 않고 독립 트리거로 얹어요) ──
 
 /** 가입: users 문서가 생기면 3장. 생성 시 이미 폰인증/배송지가 있으면 그것도 지급. */
+// ── 카카오 로그인 ──────────────────────────────────
+// 앱에서 카카오 SDK로 로그인 → accessToken을 받아 이 함수에 전달하면,
+// 카카오 API로 토큰을 검증하고 Firebase 커스텀 토큰을 발급해 돌려줘요.
+// 앱은 그 토큰으로 signInWithCustomToken 하면 Firebase 로그인이 완료돼요.
+exports.kakaoLogin = onCall(async (request) => {
+  const accessToken = request.data && request.data.accessToken;
+  if (!accessToken) {
+    throw new HttpsError('invalid-argument', 'accessToken이 필요합니다.');
+  }
+  let profile;
+  try {
+    const resp = await fetch('https://kapi.kakao.com/v2/user/me', {
+      headers: {Authorization: `Bearer ${accessToken}`},
+    });
+    if (!resp.ok) {
+      throw new HttpsError('unauthenticated', '카카오 인증에 실패했어요.');
+    }
+    profile = await resp.json();
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    throw new HttpsError('unauthenticated', '카카오 인증 확인 중 오류가 발생했어요.');
+  }
+  const kakaoId = profile && profile.id;
+  if (!kakaoId) {
+    throw new HttpsError('unauthenticated', '카카오 사용자 정보를 확인할 수 없어요.');
+  }
+  const uid = `kakao:${kakaoId}`;
+  const account = (profile && profile.kakao_account) || {};
+  const nickname = (account.profile && account.profile.nickname) || '카카오회원';
+  const email = account.email || null;
+  try {
+    await db.collection('users').doc(uid).set({
+      nickname,
+      provider: 'kakao',
+      ...(email ? {email} : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+  } catch (e) {
+    console.log('[kakaoLogin] users write failed:', e);
+  }
+  const token = await getAuth().createCustomToken(uid, {provider: 'kakao'});
+  return {token};
+});
+
+// ── 네이버 로그인 ──────────────────────────────────
+// 앱에서 네이버 SDK로 로그인 → accessToken을 이 함수에 보내면 네이버 API로
+// 검증하고 Firebase 커스텀 토큰을 발급해 돌려줘요.
+exports.naverLogin = onCall(async (request) => {
+  const accessToken = request.data && request.data.accessToken;
+  if (!accessToken) {
+    throw new HttpsError('invalid-argument', 'accessToken이 필요합니다.');
+  }
+  let profile;
+  try {
+    const resp = await fetch('https://openapi.naver.com/v1/nid/me', {
+      headers: {Authorization: `Bearer ${accessToken}`},
+    });
+    if (!resp.ok) {
+      throw new HttpsError('unauthenticated', '네이버 인증에 실패했어요.');
+    }
+    const body = await resp.json();
+    if (body.resultcode !== '00' || !body.response) {
+      throw new HttpsError('unauthenticated', '네이버 사용자 정보를 확인할 수 없어요.');
+    }
+    profile = body.response;
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    throw new HttpsError('unauthenticated', '네이버 인증 확인 중 오류가 발생했어요.');
+  }
+  const naverId = profile.id;
+  if (!naverId) {
+    throw new HttpsError('unauthenticated', '네이버 사용자 정보를 확인할 수 없어요.');
+  }
+  const uid = `naver:${naverId}`;
+  const nickname = profile.nickname || profile.name || '네이버회원';
+  const email = profile.email || null;
+  try {
+    await db.collection('users').doc(uid).set({
+      nickname,
+      provider: 'naver',
+      ...(email ? {email} : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+  } catch (e) {
+    console.log('[naverLogin] users write failed:', e);
+  }
+  const token = await getAuth().createCustomToken(uid, {provider: 'naver'});
+  return {token};
+});
+
 exports.grantSignupTickets = onDocumentCreated('users/{uid}', async (event) => {
   const uid = event.params.uid;
   const d = (event.data && event.data.data()) || {};

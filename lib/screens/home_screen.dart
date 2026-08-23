@@ -2024,7 +2024,7 @@ void _showLoginRequiredSheet(
           // 계속 폭이 늘어나면 오히려 어색해 보여서 항상 420으로 고정합니다
           // (실제로 화면이 420보다 좁으면 자연스럽게 화면 폭에 맞춰져요).
           maxWidth: 420.0,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2039,17 +2039,17 @@ void _showLoginRequiredSheet(
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               Container(
-                width: 54,
-                height: 54,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 child: const Icon(Icons.lock_outline, color: Color(0xFF16305C)),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 title,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
@@ -2545,6 +2545,10 @@ class NotificationsScreen extends StatelessWidget {
 /// 화면이에요. 결제수단 등록은 아직 실제 결제 연동 전이라 준비중 표시만
 /// 하고 통과를 막지는 않습니다.
 ///
+/// ※ 주의: 여기서 말하는 "결제수단 등록"은 구매자가 결제할 카드/수단을
+///   저장하는 게 아니라, "판매자가 판매대금을 정산받을 계좌"를 등록하는
+///   단계다. 자세한 설계 메모는 아래 build() 안의 [정산계좌] 주석 참고.
+///
 /// 필수 항목(이메일/휴대폰/배송지)을 모두 마치면 "계속하기"가 활성화되고,
 /// 눌러서 닫으면 true를 반환합니다. 중간에 나가면 false(또는 null)를
 /// 반환하므로 호출부에서는 결과가 true일 때만 원래 하려던 동작을 이어가면
@@ -2663,15 +2667,30 @@ class _TradeReadinessScreenState extends State<TradeReadinessScreen> {
                       buttonText: '배송지 등록하기',
                       onTap: _goEditAddress,
                     ),
-              // 결제수단 단계는 베타 중엔 숨기고, 정식 출시 후에도 마스터에겐 안 보여요.
+              // ───────────────────────────────────────────────────────────
+              // [정산계좌] 이 "결제수단 등록" 단계의 실제 의미 = 판매자 정산(판매대금
+              //   수취) 계좌 등록이다. 구매자가 결제할 카드/수단을 저장하는 게 아니다.
+              //   · 구매자: 낙찰 시마다 토스(PG) 결제창에서 즉시 결제하므로 결제수단을
+              //     미리 저장할 필요가 없다. (그래서 예전 '구매 결제수단 저장'은 제거함)
+              //   · 판매자: 대금을 토스가 보관했다가 거래 완료 후 수수료 공제 뒤
+              //     정산하므로, '판매대금 받을 계좌(은행·계좌번호·예금주)'를 등록해야 함.
+              //   TODO(정산계좌) 실제 구현 시:
+              //     1) 라벨을 '정산 계좌 등록'으로 표기함. [반영 완료]
+              //     2) 예금주 == 판매자 본인 검증(1원 인증 또는 PG 계좌검증).
+              //     3) 등록 시점: 가입 강제 대신 '판매 등록 시' 또는 '첫 정산 직전'.
+              //     4) 토스 정산 모델 먼저 확인 — 앱이 계좌를 직접 수집·보관하는지,
+              //        토스 서브몰/정산 온보딩에서 처리하는지에 따라 이 화면을
+              //        단순화하거나 생략할 수 있음.
+              // ───────────────────────────────────────────────────────────
+              // 정산 계좌 단계는 베타 중엔 숨기고, 정식 출시 후에도 마스터에겐 안 보여요.
               if (!DuckAuctionStore.betaMode && !isMaster)
                 const _ReadinessStepTile(
-                  icon: Icons.credit_card_outlined,
-                  title: '결제수단 등록',
+                  icon: Icons.account_balance_outlined,
+                  title: '정산 계좌 등록',
                   done: false,
                   disabled: true,
                   buttonText: '준비 중이에요',
-                  subtitle: '결제 기능은 곧 추가될 예정이에요. 지금은 낙찰 후 채팅으로 결제 방법을 안내드려요.',
+                  subtitle: '판매대금을 받을 계좌를 등록하는 단계예요. 실제 정산 연동 후 사용할 수 있어요. 지금은 낙찰 후 채팅으로 안내드려요.',
                   onTap: null,
                 ),
               const SizedBox(height: 24),
@@ -3302,6 +3321,7 @@ class HomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
     final nickname = user?.displayName ?? '덕친';
 
     return Scaffold(
@@ -3346,15 +3366,15 @@ class HomeTab extends StatelessWidget {
             icon: const Icon(Icons.notifications_none),
           ),
           IconButton(
-            tooltip: user == null ? '로그인/가입' : '로그아웃',
-            onPressed: user == null
+            tooltip: isGuest ? '로그인 / 회원가입' : '로그아웃',
+            onPressed: isGuest
                 ? () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
                     );
                   }
                 : onLogout,
-            icon: Icon(user == null ? Icons.login : Icons.logout),
+            icon: Icon(isGuest ? Icons.login : Icons.logout),
           ),
           const SizedBox(width: 6),
         ],

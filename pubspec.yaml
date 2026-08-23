@@ -2,7 +2,7 @@ name: duck_auction
 description: "Duck Auction App"
 publish_to: 'none'
 
-version: 1.0.0+55
+version: 1.0.0+58
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
@@ -31,6 +31,10 @@ dependencies:
   package_info_plus: ^8.0.0
   in_app_update: ^4.2.3
   webview_flutter: ^4.7.0
+  kakao_flutter_sdk_user: ^1.9.7
+  flutter_naver_login: ^2.1.1
+  google_sign_in: ^6.2.1
+  sign_in_with_apple: ^6.1.0
 
 dev_dependencies:
   flutter_test:
