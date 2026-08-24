@@ -1,7 +1,9 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {onDocumentCreated, onDocumentUpdated, onDocumentDeleted} = require('firebase-functions/v2/firestore');
-const {onCall, HttpsError} = require('firebase-functions/v2/https');
+const {onCall, HttpsError, onRequest} = require('firebase-functions/v2/https');
 const {defineSecret} = require('firebase-functions/params');
+const fs = require('fs');
+const path = require('path');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp, FieldValue} = require('firebase-admin/firestore');
 const {getMessaging} = require('firebase-admin/messaging');
@@ -50,6 +52,99 @@ async function sendAdminReportEmail(subject, lines) {
     console.error('[report-email] 전송 실패', e);
   }
 }
+
+// ── 커스텀 이메일 인증 메일 ─────────────────────────────────────────────
+// Firebase 기본 인증 메일(텍스트)은 배너·버튼 디자인을 못 넣어서, 여기서
+// 인증 링크를 직접 생성하고 배너·마스코트가 들어간 HTML 메일을 Gmail로 보내요.
+// 이미지는 아래 emailImage 함수가 functions/assets/에서 직접 서빙해요(별도 호스팅 불필요).
+// ⚠️ 배포 후 함수 URL이 다르면(리전/프로젝트명) 이 두 주소만 실제 URL로 바꿔주세요.
+const EMAIL_BANNER_URL = 'https://us-central1-duck-auction.cloudfunctions.net/emailImage?name=banner';
+const EMAIL_MASCOT_URL = 'https://us-central1-duck-auction.cloudfunctions.net/emailImage?name=mascot';
+
+// 인증 메일에 넣을 배너·마스코트 이미지를 functions/assets/에서 직접 서빙해요.
+// 이미지 호스팅(Storage 등)을 따로 안 해도, functions 배포만으로 이미지가 살아나요.
+exports.emailImage = onRequest(async (req, res) => {
+  const name = (req.query.name || '').toString();
+  const map = {banner: 'email_banner.jpg', mascot: 'email_mascot.png'};
+  const file = map[name];
+  if (!file) {
+    res.status(404).send('not found');
+    return;
+  }
+  try {
+    const buf = fs.readFileSync(path.join(__dirname, 'assets', file));
+    res.set('Content-Type', file.endsWith('.jpg') ? 'image/jpeg' : 'image/png');
+    res.set('Cache-Control', 'public, max-age=604800');
+    res.status(200).send(buf);
+  } catch (e) {
+    console.error('[emailImage] 이미지 읽기 실패', e);
+    res.status(500).send('error');
+  }
+});
+
+function buildVerificationEmailHtml(displayName, link) {
+  const name = (displayName && displayName.trim()) ? displayName : '덕친';
+  return `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 0;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(15,23,42,0.06);">
+<tr><td style="padding:0;"><img src="${EMAIL_BANNER_URL}" alt="덕옥션" width="600" style="display:block;width:100%;height:auto;border:0;"></td></tr>
+<tr><td style="padding:32px 32px 12px 32px;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#334155;">
+<p style="margin:0 0 18px 0;font-size:16px;font-weight:700;color:#0f172a;">안녕하세요, ${name}님!</p>
+<p style="margin:0 0 4px 0;font-size:18px;font-weight:800;color:#16305C;">덕질은 즐겁게, 경매는 스마트하게!</p>
+<p style="margin:0 0 20px 0;font-size:15px;line-height:1.6;">덕옥션에 가입해주셔서 감사합니다. 🦆</p>
+<p style="margin:0 0 8px 0;font-size:15px;line-height:1.6;">덕옥션을 시작하려면 먼저 이메일 인증이 필요해요.<br>경매 입찰·상품 등록은 이후 <strong>휴대폰·배송지 인증</strong>까지 마치면 이용할 수 있어요.</p>
+<p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;">아래 버튼을 눌러 이메일 인증을 완료해주세요.</p></td></tr>
+<tr><td align="center" style="padding:0 32px 24px 32px;"><a href="${link}" style="display:inline-block;background-color:#16305C;color:#ffffff;text-decoration:none;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:16px;font-weight:800;padding:15px 40px;border-radius:12px;">이메일 인증하기</a></td></tr>
+<tr><td style="padding:0 32px 28px 32px;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#64748b;">
+<p style="margin:0 0 16px 0;font-size:13px;line-height:1.6;">인증 링크가 정상적으로 열리지 않는 경우, 아래 주소를 복사해 브라우저에서 열어주세요.</p>
+<p style="margin:0 0 20px 0;font-size:12px;line-height:1.5;word-break:break-all;color:#94a3b8;">${link}</p>
+<p style="margin:0 0 20px 0;font-size:13px;line-height:1.6;">본인이 덕옥션 가입 또는 이메일 인증을 요청하지 않았다면, 별도의 조치 없이 이 메일을 무시하셔도 됩니다.</p>
+<p style="margin:0 0 4px 0;font-size:14px;line-height:1.6;color:#334155;">감사합니다.</p>
+<p style="margin:0;font-size:14px;font-weight:800;color:#16305C;">덕옥션 팀</p></td></tr>
+<tr><td align="center" style="padding:8px 0 0 0;"><img src="${EMAIL_MASCOT_URL}" alt="덕옥션 마스코트" width="150" style="display:block;width:150px;height:auto;border:0;"></td></tr>
+<tr><td style="padding:8px 32px 24px 32px;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;text-align:center;">
+<p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.5;">※ 본 메일은 이메일 인증을 위해 자동 발송된 메일입니다.<br>ⓒ 덕옥션 (Duck Auction)</p></td></tr>
+</table></td></tr></table></body></html>`;
+}
+
+/** 로그인한 사용자에게 배너가 포함된 커스텀 이메일 인증 메일을 보내요.
+ *  Firebase 기본 sendEmailVerification 대신 앱에서 이 함수를 호출합니다. */
+exports.sendVerificationEmail = onCall({secrets: [gmailAppPassword]}, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError('unauthenticated', '로그인이 필요해요.');
+  const user = await getAuth().getUser(uid);
+  const email = user.email;
+  if (!email) throw new HttpsError('failed-precondition', '이메일이 등록돼 있지 않아요.');
+  if (user.emailVerified) return {success: true, alreadyVerified: true};
+
+  let link;
+  try {
+    link = await getAuth().generateEmailVerificationLink(email);
+  } catch (e) {
+    console.error('[verify-email] 링크 생성 실패', e);
+    throw new HttpsError('internal', '인증 링크 생성에 실패했어요.');
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {user: ADMIN_EMAIL, pass: gmailAppPassword.value()},
+    });
+    await transporter.sendMail({
+      from: `"덕옥션" <${ADMIN_EMAIL}>`,
+      to: email,
+      subject: '[덕옥션] 이메일 인증을 완료해주세요 🦆',
+      html: buildVerificationEmailHtml(user.displayName, link),
+    });
+  } catch (e) {
+    console.error('[verify-email] 메일 발송 실패', e);
+    throw new HttpsError('internal', '인증 메일 발송에 실패했어요.');
+  }
+  return {success: true};
+});
 
 // 결제 시나리오 관리 화면(runPaymentTestScenario, home_screen.dart)과 동일한
 // 규칙을 씁니다: 1순위 24시간, 2·3순위 각 12시간.

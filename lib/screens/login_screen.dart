@@ -45,10 +45,11 @@ class LoginScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
+      if (_didSignIn(context)) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('카카오 로그인에 실패했어요. 다시 시도해주세요.')),
+        const SnackBar(content: Text('카카오 로그인은 실제 연동을 준비 중이에요. 지금은 애플 또는 이메일로 로그인해주세요.')),
       );
     }
   }
@@ -58,11 +59,22 @@ class LoginScreen extends StatelessWidget {
   Future<void> _naverLogin(BuildContext context) async {
     try {
       await FlutterNaverLogin.logIn();
-      if (!await FlutterNaverLogin.isLoggedIn()) return;
+      // 이 버전(flutter_naver_login 2.x)엔 isLoggedIn()이 없어서, 예전 코드가
+      // '_Map is not a subtype of bool?' 캐스팅 에러를 냈어요. 대신 발급된
+      // 액세스 토큰이 있는지로 로그인 성공을 판단합니다.
       final token = await FlutterNaverLogin.getCurrentAccessToken();
+      final accessToken = token.accessToken;
+      if (accessToken.isEmpty) {
+        // 테스트 연동 상태라 실 로그인이 안 되는 경우(또는 취소) 여기로 와요.
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('네이버 로그인은 실제 연동을 준비 중이에요. 지금은 애플 또는 이메일로 로그인해주세요.')),
+        );
+        return;
+      }
       final callRes = await FirebaseFunctions.instance
           .httpsCallable('naverLogin')
-          .call<Map<String, dynamic>>({'accessToken': token.accessToken});
+          .call<Map<String, dynamic>>({'accessToken': accessToken});
       final firebaseToken = callRes.data['token'] as String;
       await FirebaseAuth.instance.signInWithCustomToken(firebaseToken);
       if (!context.mounted) return;
@@ -70,10 +82,11 @@ class LoginScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
+      if (_didSignIn(context)) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('네이버 로그인에 실패했어요. 다시 시도해주세요.')),
+        const SnackBar(content: Text('네이버 로그인은 실제 연동을 준비 중이에요. 지금은 애플 또는 이메일로 로그인해주세요.')),
       );
     }
   }
@@ -94,10 +107,11 @@ class LoginScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
+      if (_didSignIn(context)) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Google 로그인에 실패했어요. 다시 시도해주세요.')),
+        const SnackBar(content: Text('Google 로그인은 실제 연동을 준비 중이에요. 지금은 애플 또는 이메일로 로그인해주세요.')),
       );
     }
   }
@@ -126,12 +140,24 @@ class LoginScreen extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
+      if (_didSignIn(context)) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Apple 로그인에 실패했어요. 다시 시도해주세요.')),
+        const SnackBar(content: Text('Apple 로그인에 실패했어요. 잠시 후 다시 시도해주세요.')),
       );
     }
+  }
+
+  // 로그인 과정에서 예외가 났지만 Firebase 세션은 이미 만들어진 경우
+  // (로그인 자체는 성공, 이후 부수 단계에서만 예외) → 실패로 처리하지 않고 홈으로.
+  bool _didSignIn(BuildContext context) {
+    if (FirebaseAuth.instance.currentUser == null) return false;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
+    return true;
   }
 
   // 게스트 진입 전, 게스트로는 불가능한 동작을 안내하고 동의를 받은 뒤 진입.
@@ -158,6 +184,14 @@ class LoginScreen extends StatelessWidget {
       ),
     );
     if (ok != true || !context.mounted) return;
+    // 혹시 이전에 로그인했던 세션이 남아 있으면 게스트로 들어가기 전에 정리해요.
+    // (세션이 남아 있으면 홈 우측 상단이 '로그아웃'으로 보여 게스트 안내와 어긋나요.)
+    try {
+      if (FirebaseAuth.instance.currentUser != null) {
+        await FirebaseAuth.instance.signOut();
+      }
+    } catch (_) {}
+    if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
       (route) => false,

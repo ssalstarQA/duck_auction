@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,6 +44,15 @@ class AuthService {
 
   static bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
 
+  /// 이메일/비밀번호로 가입한 사용자인지 여부예요. SNS 로그인(구글·애플·카카오·
+  /// 네이버) 사용자는 provider가 'password'가 아니거나 아예 없어요. 이메일 인증
+  /// 단계는 이메일/비밀번호 가입자에게만 의미가 있어서, 이 값으로 구분해요.
+  static bool get isEmailPasswordUser {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((p) => p.providerId == 'password');
+  }
+
   /// 휴대폰 인증 여부는 Firebase Auth에 실제로 연결된 전화번호가 있는지로
   /// 판단합니다(별도 Firestore 플래그에만 의존하면 동기화가 어긋날 수 있어요).
   static bool get isPhoneVerified => _auth.currentUser?.phoneNumber != null;
@@ -61,7 +71,15 @@ class AuthService {
   static Future<void> sendEmailVerification() async {
     final user = _auth.currentUser;
     if (user == null || user.emailVerified) return;
-    await user.sendEmailVerification();
+    // 배너가 포함된 커스텀 인증 메일을 Cloud Function(sendVerificationEmail)으로
+    // 보냅니다. 함수가 아직 배포 안 됐거나 발송에 실패하면, 사용자가 인증을
+    // 아예 못 받는 일이 없도록 Firebase 기본 인증 메일로 폴백합니다.
+    try {
+      await FirebaseFunctions.instance.httpsCallable('sendVerificationEmail').call();
+    } catch (e) {
+      if (kDebugMode) print('커스텀 인증 메일 실패, 기본 메일로 폴백: $e');
+      await user.sendEmailVerification();
+    }
   }
 
   /// 한국 휴대폰 번호(예: 010-1234-5678, 01012345678)를 국제 표준 형식

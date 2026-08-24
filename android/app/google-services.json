@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "203119332761-hdgk6osop4f2qtrmqduqhcs6vl7s536a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.duckauction.app",
+            "certificate_hash": "a10f3aa09f11e8c3805a56ffcce79dacc48bb206"
+          }
+        },
+        {
+          "client_id": "203119332761-scngcs5r1i11itjnol7jd9avcono409g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.duckauction.app",
+            "certificate_hash": "1958d92587ace5a7a68e22b5423f5cb5214c937b"
+          }
+        },
+        {
           "client_id": "203119332761-92f13770jbl2q8k0iarthn8iq622fl6v.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +45,13 @@
             {
               "client_id": "203119332761-92f13770jbl2q8k0iarthn8iq622fl6v.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "203119332761-1nn45mu4ds3ji6i28iu1gudh41hbrc1m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.duckAuction"
+              }
             }
           ]
         }

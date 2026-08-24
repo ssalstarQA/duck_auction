@@ -117,7 +117,36 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
-  void _skip() {
+  // 건너뛰기를 누르면 바로 넘어가지 않고, 이메일 인증이 왜 필요한지 먼저 안내해요.
+  Future<void> _skip() async {
+    final skip = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('이메일 인증을 먼저 하는 게 좋아요', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text(
+          '이메일 인증은 안전한 거래를 위한 기본 절차예요.\n\n'
+          '· 인증을 마치지 않으면 경매 등록·입찰 같은 거래 기능을 이용할 수 없어요.\n'
+          '· 비밀번호 재설정 등 계정 보호에도 꼭 필요해요.\n'
+          '· 지금 메일함에서 링크만 누르면 바로 끝나요.',
+          style: TextStyle(height: 1.5, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF94A3B8)),
+            child: const Text('그래도 나중에', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF16305C)),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('지금 인증할게요', style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+    if (skip != true || !mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
       (route) => false,

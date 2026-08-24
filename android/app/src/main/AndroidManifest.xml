@@ -19,8 +19,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:taskAffinity=""
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -48,10 +47,15 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/UCropTheme"/>
-        <!-- 카카오 로그인 리다이렉트 처리 액티비티 (scheme = kakao{네이티브앱키}) -->
+        <!-- 카카오 로그인 리다이렉트 처리 액티비티 (scheme = kakao{네이티브앱키})
+             taskAffinity를 앱과 동일하게 고정하고 recents에서 숨겨서, 카카오톡에서
+             돌아올 때 별도의 두 번째 앱(태스크)이 뜨지 않고 기존 앱으로 이어지게 해요. -->
         <activity
             android:name="com.kakao.sdk.flutter.AuthCodeHandlerActivity"
-            android:exported="true">
+            android:exported="true"
+            android:taskAffinity="${applicationId}"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

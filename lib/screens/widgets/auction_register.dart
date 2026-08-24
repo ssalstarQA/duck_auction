@@ -394,6 +394,8 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
   // 토글을 켜면 실행돼요. 입력을 검증하고, DIM 로딩을 띄운 뒤 태그·제목 기준으로
   // 누적된 완료 거래를 검색해 추천가를 계산해요. 조건을 못 맞추면 토글을 OFF로 되돌립니다.
   Future<void> _applyAiPrice() async {
+    // 분석이 끝난 뒤 제목 입력창으로 포커스가 튀며 키보드가 올라오는 걸 막아요.
+    FocusManager.instance.primaryFocus?.unfocus();
     final title = _titleController.text.trim();
     final tags = _currentTags();
 
@@ -406,6 +408,13 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
       );
       return;
     }
+
+    // 이전에 계산된 추천가가 남아 그대로 다시 표시되지 않도록, 새로 조회하기
+    // 전에 값을 비워요. (같은 화면에서 내용 바꾼 뒤 다시 토글할 때 잔상 방지)
+    setState(() {
+      _aiComputed = false;
+      _aiDataPrice = null;
+    });
 
     // 2) 전체화면 DIM 로딩(덕옥션 아이콘) 표시.
     showGeneralDialog<void>(
@@ -544,6 +553,8 @@ class _AuctionRegisterScreenState extends State<AuctionRegisterScreen> {
             ],
           ),
         ),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsOverflowAlignment: OverflowBarAlignment.center,
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         actions: [
           TextButton(

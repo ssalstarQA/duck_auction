@@ -69,10 +69,11 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    await _fadeController.reverse();
-
-    if (!mounted) return;
-
+    // 세션 복구(currentUser)를 '스플래시 로고가 보이는 상태에서' 먼저 기다려요.
+    // 예전엔 로고를 먼저 페이드아웃한 뒤 여기서 최대 5초를 기다려서, 그 사이에
+    // 흰 화면이 떴어요. 이제는 로고를 유지한 채 기다리고, 바로 아래 화면 전환의
+    // 페이드로 로그인/홈 화면이 로고 위로 자연스럽게 나타나요.
+    //
     // 웹에서는 Firebase Auth가 브라우저 저장소에서 세션을 복구하는 데
     // 시간이 걸릴 수 있습니다. null 이벤트 하나만 보고 로그인 화면으로 보내지 않고
     // 여러 번 currentUser를 확인합니다.

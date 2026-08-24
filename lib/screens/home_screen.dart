@@ -239,6 +239,25 @@ class DuckAuctionStore {
       return false;
     }
   }
+
+  // 판매대금을 받을 정산 계좌(은행·계좌번호·예금주)가 등록돼 있는지 확인해요.
+  // 경매 등록(판매) 전에 필수로 요구합니다.
+  static Future<bool> hasRegisteredPayoutAccount(String uid) async {
+    try {
+      // 계좌번호는 민감정보라 본인만 읽는 비공개 서브컬렉션에 저장해요.
+      final doc = await FirebaseFirestore.instance
+          .collection('users').doc(uid)
+          .collection('private').doc('payoutAccount')
+          .get();
+      final acct = doc.data();
+      final bank = (acct?['bank'] as String?)?.trim() ?? '';
+      final number = (acct?['accountNumber'] as String?)?.trim() ?? '';
+      final holder = (acct?['holder'] as String?)?.trim() ?? '';
+      return bank.isNotEmpty && number.isNotEmpty && holder.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
   static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _productsSubscription;
 
 
@@ -551,7 +570,7 @@ class DuckAuctionStore {
       throw StateError('로그인한 사용자만 상품을 등록할 수 있어요.');
     }
     if (!DuckAuctionStore.isVerificationBypassed &&
-        (!AuthService.isEmailVerified || !AuthService.isPhoneVerified)) {
+        ((AuthService.isEmailPasswordUser && !AuthService.isEmailVerified) || !AuthService.isPhoneVerified)) {
       throw StateError('경매 등록은 이메일 인증과 휴대폰 인증을 마친 후 이용할 수 있어요.');
     }
     if (!await hasRegisteredAddress(user.uid)) {
@@ -791,7 +810,7 @@ class DuckAuctionStore {
       return const BidSaveResult.failure('입찰은 로그인 후 이용할 수 있어요.');
     }
     if (!DuckAuctionStore.isVerificationBypassed &&
-        (!AuthService.isEmailVerified || !AuthService.isPhoneVerified)) {
+        ((AuthService.isEmailPasswordUser && !AuthService.isEmailVerified) || !AuthService.isPhoneVerified)) {
       return const BidSaveResult.failure('입찰은 이메일 인증과 휴대폰 인증을 마친 후 이용할 수 있어요.');
     }
     if (!await hasRegisteredAddress(user.uid)) {
@@ -1025,7 +1044,7 @@ class DuckAuctionStore {
       return const AutoBidResult.failure('예약입찰은 로그인 후 이용할 수 있어요.');
     }
     if (!DuckAuctionStore.isVerificationBypassed &&
-        (!AuthService.isEmailVerified || !AuthService.isPhoneVerified)) {
+        ((AuthService.isEmailPasswordUser && !AuthService.isEmailVerified) || !AuthService.isPhoneVerified)) {
       return const AutoBidResult.failure('예약입찰은 이메일 인증과 휴대폰 인증을 마친 후 이용할 수 있어요.');
     }
     if (!await hasRegisteredAddress(user.uid)) {
@@ -2019,16 +2038,20 @@ void _showLoginRequiredSheet(
     ),
     builder: (context) {
       return SafeArea(
-        child: ResponsiveContentBounds(
-          // 이 시트는 전체 화면이 아니라 떠 있는 모달이라, 폰 화면에서도
-          // 계속 폭이 늘어나면 오히려 어색해 보여서 항상 420으로 고정합니다
-          // (실제로 화면이 420보다 좁으면 자연스럽게 화면 폭에 맞춰져요).
-          maxWidth: 420.0,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        // 폭은 420으로 제한(가로 중앙)하되, 세로로는 내용만큼만 차지하게 해요.
+        // ResponsiveContentBounds는 내부가 Align이라 세로로 꽉 늘어나서, 시트
+        // 아래에 큰 빈 여백이 생겼어요. heightFactor: 1.0으로 높이를 내용에 맞춰요.
+        child: Align(
+          alignment: Alignment.topCenter,
+          heightFactor: 1.0,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Center(
                 child: Container(
                   width: 42,
@@ -2039,20 +2062,26 @@ void _showLoginRequiredSheet(
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: const Icon(Icons.lock_outline, color: Color(0xFF16305C)),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: const Icon(Icons.lock_outline, size: 22, color: Color(0xFF16305C)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
@@ -2061,12 +2090,13 @@ void _showLoginRequiredSheet(
                   color: Color(0xFF4B5563),
                   fontWeight: FontWeight.w700,
                   height: 1.4,
+                  fontSize: 13.5,
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
+                  minimumSize: const Size(double.infinity, 48),
                   backgroundColor: const Color(0xFF16305C),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -2079,16 +2109,18 @@ void _showLoginRequiredSheet(
                 },
                 child: const Text('로그인 / 회원가입하기', style: TextStyle(fontWeight: FontWeight.w900)),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               TextButton(
                 style: TextButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
+                  minimumSize: const Size(double.infinity, 42),
                   foregroundColor: const Color(0xFF777777),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('계속 구경하기'),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       );
@@ -2118,11 +2150,14 @@ Future<bool> _needsTradeVerification() async {
   // 최신 우회 목록을 불러온 뒤, 이 계정이 인증 우회 대상이면 인증 없이 통과시켜요.
   // (배송지는 인증 인프라와 무관하게 폼만 채우면 되므로 그대로 요구합니다.)
   await DuckAuctionStore.loadBetaConfig();
+  // 배송지·정산 계좌는 인증 우회 여부와 무관하게 폼만 채우면 되므로 그대로 요구해요.
+  final hasAddress = await DuckAuctionStore.hasRegisteredAddress(user.uid);
+  final hasPayout = await DuckAuctionStore.hasRegisteredPayoutAccount(user.uid);
   if (DuckAuctionStore.isVerificationBypassed) {
-    return !await DuckAuctionStore.hasRegisteredAddress(user.uid);
+    return !hasAddress || !hasPayout;
   }
-  if (!AuthService.isEmailVerified || !AuthService.isPhoneVerified) return true;
-  return !await DuckAuctionStore.hasRegisteredAddress(user.uid);
+  if ((AuthService.isEmailPasswordUser && !AuthService.isEmailVerified) || !AuthService.isPhoneVerified) return true;
+  return !hasAddress || !hasPayout;
 }
 
 /// 판매(경매) 등록 전 통합인증(CI) 본인인증이 필요한지 판별해요.
@@ -2374,6 +2409,114 @@ Future<bool> showAddressEditSheet(BuildContext context) async {
   return saved == true;
 }
 
+/// 판매대금(낙찰금)을 받을 정산 계좌를 등록·수정하는 바텀시트예요.
+/// users/{uid}.payoutAccount = {bank, accountNumber, holder} 에 저장합니다.
+/// 경매 등록(판매) 전 필수 단계라 TradeReadinessScreen에서 호출해요.
+Future<bool> showPayoutAccountEditSheet(BuildContext context) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return false;
+  Map<String, dynamic> existing = const {};
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('users').doc(user.uid)
+        .collection('private').doc('payoutAccount')
+        .get();
+    existing = Map<String, dynamic>.from(doc.data() ?? const {});
+  } catch (_) {}
+
+  const banks = <String>[
+    '국민은행', '신한은행', '우리은행', '하나은행', '농협은행', '기업은행',
+    '카카오뱅크', '토스뱅크', '케이뱅크', 'SC제일은행', '씨티은행', '수협은행',
+    '대구은행', '부산은행', '경남은행', '광주은행', '전북은행', '제주은행',
+    '새마을금고', '우체국', '신협', '산업은행', '저축은행',
+  ];
+
+  final numberCtrl = TextEditingController(text: (existing['accountNumber'] as String?) ?? '');
+  final holderCtrl = TextEditingController(
+    text: (existing['holder'] as String?) ?? (user.displayName ?? ''),
+  );
+  String? selectedBank = existing['bank'] as String?;
+  if (selectedBank != null && !banks.contains(selectedBank)) selectedBank = null;
+
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.of(sheetContext).viewInsets.bottom + MediaQuery.of(sheetContext).viewPadding.bottom + 20,
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('정산 계좌 등록', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          const Text(
+            '판매대금(낙찰금)을 받을 본인 명의 계좌예요. 거래가 완료되면 이 계좌로 정산돼요. 예금주는 판매자 본인과 같아야 해요.',
+            style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, height: 1.4, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: selectedBank,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: '은행', border: OutlineInputBorder()),
+            hint: const Text('은행 선택'),
+            items: banks.map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+            onChanged: (v) => setSheetState(() => selectedBank = v),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: numberCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: '계좌번호', hintText: "'-' 없이 숫자만 입력", border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: holderCtrl,
+            decoration: const InputDecoration(labelText: '예금주', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () async {
+              if (selectedBank == null) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('은행을 선택해주세요.')));
+                return;
+              }
+              final number = numberCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+              if (number.length < 8) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('계좌번호를 정확히 입력해주세요.')));
+                return;
+              }
+              if (holderCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('예금주를 입력해주세요.')));
+                return;
+              }
+              await FirebaseFirestore.instance
+                  .collection('users').doc(user.uid)
+                  .collection('private').doc('payoutAccount')
+                  .set({
+                'bank': selectedBank,
+                'accountNumber': number,
+                'holder': holderCtrl.text.trim(),
+                'updatedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+              if (sheetContext.mounted) Navigator.pop(sheetContext, true);
+            },
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            child: const Text('저장하기'),
+          ),
+        ]),
+      ),
+    ),
+  );
+  numberCtrl.dispose();
+  holderCtrl.dispose();
+  return saved == true;
+}
+
 /// 알림함 화면. 현재는 users/{uid}/notifications 하위 컬렉션을 구독해서 보여줘요.
 /// (푸시 발송 시 이 컬렉션에 함께 저장해두면 목록에 쌓여요.) 아직 저장된 알림이
 /// 없으면 빈 상태 안내를 보여줍니다.
@@ -2563,12 +2706,35 @@ class TradeReadinessScreen extends StatefulWidget {
 class _TradeReadinessScreenState extends State<TradeReadinessScreen> {
   bool _hasAddress = false;
   bool _loadingAddress = true;
+  bool _hasPayout = false;
+  bool _loadingPayout = true;
 
   @override
   void initState() {
     super.initState();
     _refreshAddress();
+    _refreshPayout();
     _loadBeta();
+  }
+
+  Future<void> _refreshPayout() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _loadingPayout = false);
+      return;
+    }
+    setState(() => _loadingPayout = true);
+    final has = await DuckAuctionStore.hasRegisteredPayoutAccount(uid);
+    if (!mounted) return;
+    setState(() {
+      _hasPayout = has;
+      _loadingPayout = false;
+    });
+  }
+
+  Future<void> _goEditPayout() async {
+    await showPayoutAccountEditSheet(context);
+    await _refreshPayout();
   }
 
   Future<void> _loadBeta() async {
@@ -2611,16 +2777,52 @@ class _TradeReadinessScreenState extends State<TradeReadinessScreen> {
     await _refreshAddress();
   }
 
+  // '나중에 할게요'를 누르면 바로 나가지 않고, 인증이 왜 필요한지 먼저 안내해요.
+  Future<void> _confirmSkipReadiness() async {
+    final skip = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('인증을 먼저 마치는 게 좋아요', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text(
+          '이메일·휴대폰 인증은 안전한 거래를 위한 최소 절차예요.\n\n'
+          '· 인증을 마치지 않으면 경매 등록·입찰 같은 거래 기능을 이용할 수 없어요.\n'
+          '· 한 사람이 여러 계정을 만들어 경매 가격을 조작하는 것을 막기 위해 꼭 필요해요.',
+          style: TextStyle(height: 1.5, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF777777)),
+            child: const Text('그래도 나중에', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF16305C)),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('지금 인증할게요', style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+    if (skip == true && mounted) Navigator.of(context).pop(false);
+  }
+
   @override
   Widget build(BuildContext context) {
     // 인증 우회 대상 계정은 이메일·휴대폰 인증을 완료한 것으로 처리해요.
     // 마스터는 배송지까지 완료 처리해서 모든 단계를 통과한 것으로 봐요.
     final bypassed = DuckAuctionStore.isVerificationBypassed;
     final isMaster = DuckAuctionStore.isMasterAdmin;
-    final needsEmail = !bypassed && !AuthService.isEmailVerified;
+    // 이메일 인증은 이메일/비밀번호 가입자에게만 요구·표시해요.
+    // (SNS 로그인 사용자는 제공자가 신원을 이미 확인했고, 카카오/네이버는
+    //  이메일 자체가 없을 수 있어서 이메일 인증 단계가 의미 없어요.)
+    final isEmailUser = AuthService.isEmailPasswordUser;
+    final needsEmail = !bypassed && isEmailUser && !AuthService.isEmailVerified;
     final needsPhone = !bypassed && !AuthService.isPhoneVerified;
     final needsAddress = !isMaster && !_hasAddress;
-    final allReady = !needsEmail && !needsPhone && !needsAddress && !_loadingAddress;
+    final needsPayout = !isMaster && !_hasPayout;
+    final allReady = !needsEmail && !needsPhone && !needsAddress && !needsPayout && !_loadingAddress && !_loadingPayout;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -2633,24 +2835,17 @@ class _TradeReadinessScreenState extends State<TradeReadinessScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('안전한 거래를 위해 아래 항목을 준비해주세요', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
-              const Text('낙찰·판매 진행에 필요한 정보예요. 한 번만 등록해두면 계속 쓸 수 있어요.', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, height: 1.4)),
-              if (DuckAuctionStore.betaMode) ...[
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(color: const Color(0xFFEAF0F9), borderRadius: BorderRadius.circular(12)),
-                  child: const Text('🐣 베타 기간이에요. 실제 결제·배송은 진행되지 않으니 편하게 입찰·낙찰을 체험해보세요.', style: TextStyle(color: Color(0xFF16305C), fontWeight: FontWeight.w700, height: 1.4)),
-                ),
-              ],
+              const Text('낙찰·판매 진행에 필요한 정보예요.\n한 번만 등록해두면 계속 쓸 수 있어요.', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, height: 1.4)),
               const SizedBox(height: 22),
-              _ReadinessStepTile(
-                icon: Icons.mail_outline,
-                title: '이메일 인증',
-                done: !needsEmail,
-                buttonText: '이메일 인증하러 가기',
-                onTap: _goVerifyEmail,
-              ),
+              // 이메일 인증 단계는 이메일/비밀번호 가입자에게만 보여줘요.
+              if (isEmailUser)
+                _ReadinessStepTile(
+                  icon: Icons.mail_outline,
+                  title: '이메일 인증',
+                  done: !needsEmail,
+                  buttonText: '이메일 인증하러 가기',
+                  onTap: _goVerifyEmail,
+                ),
               _ReadinessStepTile(
                 icon: Icons.sms_outlined,
                 title: '휴대폰 본인 인증',
@@ -2667,32 +2862,20 @@ class _TradeReadinessScreenState extends State<TradeReadinessScreen> {
                       buttonText: '배송지 등록하기',
                       onTap: _goEditAddress,
                     ),
-              // ───────────────────────────────────────────────────────────
-              // [정산계좌] 이 "결제수단 등록" 단계의 실제 의미 = 판매자 정산(판매대금
-              //   수취) 계좌 등록이다. 구매자가 결제할 카드/수단을 저장하는 게 아니다.
-              //   · 구매자: 낙찰 시마다 토스(PG) 결제창에서 즉시 결제하므로 결제수단을
-              //     미리 저장할 필요가 없다. (그래서 예전 '구매 결제수단 저장'은 제거함)
-              //   · 판매자: 대금을 토스가 보관했다가 거래 완료 후 수수료 공제 뒤
-              //     정산하므로, '판매대금 받을 계좌(은행·계좌번호·예금주)'를 등록해야 함.
-              //   TODO(정산계좌) 실제 구현 시:
-              //     1) 라벨을 '정산 계좌 등록'으로 표기함. [반영 완료]
-              //     2) 예금주 == 판매자 본인 검증(1원 인증 또는 PG 계좌검증).
-              //     3) 등록 시점: 가입 강제 대신 '판매 등록 시' 또는 '첫 정산 직전'.
-              //     4) 토스 정산 모델 먼저 확인 — 앱이 계좌를 직접 수집·보관하는지,
-              //        토스 서브몰/정산 온보딩에서 처리하는지에 따라 이 화면을
-              //        단순화하거나 생략할 수 있음.
-              // ───────────────────────────────────────────────────────────
-              // 정산 계좌 단계는 베타 중엔 숨기고, 정식 출시 후에도 마스터에겐 안 보여요.
-              if (!DuckAuctionStore.betaMode && !isMaster)
-                const _ReadinessStepTile(
-                  icon: Icons.account_balance_outlined,
-                  title: '정산 계좌 등록',
-                  done: false,
-                  disabled: true,
-                  buttonText: '준비 중이에요',
-                  subtitle: '판매대금을 받을 계좌를 등록하는 단계예요. 실제 정산 연동 후 사용할 수 있어요. 지금은 낙찰 후 채팅으로 안내드려요.',
-                  onTap: null,
-                ),
+              // [정산계좌] 판매대금(낙찰금)을 받을 판매자 본인 계좌를 등록하는 단계예요.
+              // 경매 등록(판매) 전 필수라서, 마스터를 제외하면 항상 보여줘요.
+              // (구매자 입찰은 낙찰 시 토스 결제창에서 즉시 결제하므로 계좌 저장이 필요 없어요.)
+              if (!isMaster)
+                (_loadingPayout
+                    ? const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()))
+                    : _ReadinessStepTile(
+                        icon: Icons.account_balance_outlined,
+                        title: '정산 계좌 등록',
+                        subtitle: '판매대금(낙찰금)을 받을 본인 명의 계좌를 등록해요.',
+                        done: !needsPayout,
+                        buttonText: '정산 계좌 등록하기',
+                        onTap: _goEditPayout,
+                      )),
               const SizedBox(height: 24),
               FilledButton(
                 style: FilledButton.styleFrom(
@@ -2707,7 +2890,7 @@ class _TradeReadinessScreenState extends State<TradeReadinessScreen> {
               const SizedBox(height: 8),
               TextButton(
                 style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: const Color(0xFF777777)),
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: _confirmSkipReadiness,
                 child: const Text('나중에 할게요'),
               ),
             ]),
